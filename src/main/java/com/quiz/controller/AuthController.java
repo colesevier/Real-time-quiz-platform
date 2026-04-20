@@ -64,4 +64,11 @@ public class AuthController {
         model.addAttribute("error", "Registration failed.");
         return "register";
     }
+
+    @GetMapping("/logout")
+    public String logout(HttpSession session) {
+        session.invalidate();
+        return "redirect:/auth/login";
+    }
+
 }
