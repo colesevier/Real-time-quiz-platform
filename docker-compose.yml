@@ -1,0 +1,34 @@
+version: '3.9'
+services:
+  db:
+    image: mysql:8.0
+    container_name: kahoot-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: kahoot
+      MYSQL_USER: quiz_user
+      MYSQL_PASSWORD: ${QUIZ_DB_PASS}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  app:
+    build: .
+    container_name: kahoot-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      QUIZ_DB_URL: jdbc:mysql://db:3306/kahoot?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      QUIZ_DB_USER: quiz_user
+      QUIZ_DB_PASS: ${QUIZ_DB_PASS}
+    ports:
+      - "8080:8080"
+volumes:
+  mysql_data:
