@@ -1,0 +1,44 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org">
+  <head>
+    <meta charset="utf-8" />
+    <title>Host Lobby</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Hosting: <span th:text="${gameTitle}">Game Title</span></h1>
+      <p>
+        Invite code: <strong class="code" th:text="${code}" id="code">------</strong>
+        &middot;
+        Invite link:
+        <a id="invite-link" th:href="'/join?code=' + ${code}" th:text="'/join?code=' + ${code}">/join?code=...</a>
+      </p>
+      <p>
+        Status: <span id="status" th:text="${status}">LOBBY</span>
+        &middot;
+        Players: <span id="player-count">0</span> / <span th:text="${maxPlayers}">50</span>
+      </p>
+
+      <h2>Players</h2>
+      <ul id="roster" class="roster"><li class="empty">Waiting for players...</li></ul>
+
+      <div class="controls">
+        <button type="button" class="btn" id="start-btn" disabled>Start Game</button>
+        <form method="post" th:action="@{'/host/' + ${code} + '/cancel'}" style="display:inline">
+          <button type="submit" class="btn btn-warn">Cancel Game</button>
+        </form>
+      </div>
+
+      <div id="log" class="log"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <script th:inline="javascript">
+      window.LOBBY_CODE = /*[[${code}]]*/ '';
+      window.LOBBY_ROLE = 'host';
+    </script>
+    <script th:src="@{/js/lobby.js}"></script>
+  </body>
+</html>

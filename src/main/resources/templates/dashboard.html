@@ -3,16 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <title>Dashboard</title>
-    <link rel="stylesheet" th:href="@{/static/css/styles.css}" />
+    <link rel="stylesheet" th:href="@{/css/styles.css}" />
   </head>
   <body>
     <div class="container">
       <h1>Your Dashboard</h1>
       <div class="controls">
-        <a th:href="@{/create}" class="btn">Create Game</a>
+        <form method="post" action="/host/start" style="display:inline">
+          <button type="submit" class="btn">Create Game</button>
+        </form>
         <a th:href="@{/join}" class="btn">Join Game</a>
         <a th:href="@{/auth/logout}" class="btn">Logout</a>
       </div>
+      <p class="hint">
+        "Create Game" seeds a sample 3-question quiz, opens a lobby, and gives you a 6-digit code.
+        Open another browser window in private mode, hit "Join Game", and enter the code.
+      </p>
       <section id="past-games">
         <h2>Past Games</h2>
         <div class="grid">No games yet</div>
