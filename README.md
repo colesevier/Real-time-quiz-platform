@@ -26,3 +26,11 @@ mvn clean package
 Notes & next steps
 - The project contains skeleton servlets, DAOs, JSP views, and a simple WebSocket endpoint. It is intended as a starting point to implement the full feature set in the specification.
 - Consider switching to Spring Boot (with STOMP over WebSocket) if you want richer message routing and easier development for STOMP topics.
+
+To run program:
+1. Open terminal and run:
+mvn -DskipTests package
+docker compose up -d --build
+docker compose ps
+2. Open in browser:
+http://localhost:8080/auth/register
