@@ -21,8 +21,15 @@ public class JoinController {
     }
 
     @GetMapping("/join")
-    public String form(@RequestParam(required = false) String code, Model model) {
+    public String form(@RequestParam(required = false) String code,
+                       HttpSession session,
+                       Model model) {
         model.addAttribute("code", code == null ? "" : code);
+
+        // Pre-fill nickname for guests coming from /auth/guest
+        String guestName = (String) session.getAttribute("guestName");
+        model.addAttribute("nickname", guestName != null ? guestName : "");
+
         return "join";
     }
 
@@ -33,27 +40,34 @@ public class JoinController {
                          Model model) {
         String trimmedCode = code == null ? "" : code.trim();
         String trimmedNick = nickname == null ? "" : nickname.trim();
+
         if (trimmedCode.isEmpty() || trimmedNick.isEmpty()) {
             model.addAttribute("code", trimmedCode);
+            model.addAttribute("nickname", trimmedNick);
             model.addAttribute("error", "Code and nickname are required.");
             return "join";
         }
         if (trimmedNick.length() > 24) {
             model.addAttribute("code", trimmedCode);
+            model.addAttribute("nickname", trimmedNick);
             model.addAttribute("error", "Nickname must be 24 characters or fewer.");
             return "join";
         }
+
         Optional<GameSession> s = sessions.findByCode(trimmedCode);
         if (s.isEmpty()) {
             model.addAttribute("code", trimmedCode);
-            model.addAttribute("error", "Invalid code");
+            model.addAttribute("nickname", trimmedNick);
+            model.addAttribute("error", "Invalid code.");
             return "join";
         }
         if (!"LOBBY".equals(s.get().getStatus())) {
             model.addAttribute("code", trimmedCode);
+            model.addAttribute("nickname", trimmedNick);
             model.addAttribute("error", "Session is no longer accepting players.");
             return "join";
         }
+
         session.setAttribute("nickname", trimmedNick);
         session.setAttribute("playerCode", trimmedCode);
         return "redirect:/play/" + trimmedCode;

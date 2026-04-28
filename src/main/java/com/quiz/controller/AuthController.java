@@ -48,16 +48,12 @@ public class AuthController {
 
     @PostMapping("/register")
     public String doRegister(@RequestParam String username, @RequestParam String email, @RequestParam String password, @RequestParam String confirm, Model model) {
-        // Always repopulate so the form isn't blank on error
-        model.addAttribute("username", username);
-        model.addAttribute("email", email);
-
         if (password == null || password.length() < 8) {
             model.addAttribute("error", "Password must be at least 8 characters.");
             return "register";
         }
         if (!password.equals(confirm)) {
-            model.addAttribute("error", "Passwords do not match.");
+            model.addAttribute("error", "Password and confirmation do not match.");
             return "register";
         }
         if (userDAO.findByUsername(username).isPresent()) {
@@ -66,14 +62,28 @@ public class AuthController {
         }
 
         User u = new User(UUID.randomUUID(), username, PasswordUtil.hash(password), email);
-        try {
-            boolean created = userDAO.register(u);
-            if (created) return "redirect:/auth/login";
-            model.addAttribute("error", "Registration failed. Please try again.");
-        } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            model.addAttribute("error", "An account with that email already exists.");
-        }
+        boolean created = userDAO.register(u);
+        if (created) return "redirect:/auth/login";
+        model.addAttribute("error", "Registration failed.");
         return "register";
+    }
+
+    @PostMapping("/guest")
+    public String doGuest(@RequestParam String guestName, HttpSession session, Model model) {
+        String trimmed = guestName == null ? "" : guestName.trim();
+        if (trimmed.isEmpty()) {
+            model.addAttribute("guestError", "Please enter a display name.");
+            return "login";
+        }
+        if (trimmed.length() > 24) {
+            model.addAttribute("guestError", "Name must be 24 characters or fewer.");
+            model.addAttribute("guestName", trimmed);
+            return "login";
+        }
+        // Mark session as guest — no userID so host-only routes stay protected
+        session.setAttribute("guestName", trimmed);
+        session.setMaxInactiveInterval(30 * 60);
+        return "redirect:/join";
     }
 
     @GetMapping("/logout")

@@ -54,10 +54,13 @@
         <p style="color: var(--gray-600); font-size:0.9rem; margin-bottom:24px; line-height:1.6;">
           Join a game as a guest. You can always register later to save your scores.
         </p>
+        <div th:if="${guestError}" class="error-box" th:text="${guestError}"></div>
         <form method="post" action="/auth/guest">
           <div class="form-group">
             <label for="guestName">Your Name</label>
-            <input type="text" id="guestName" name="guestName" placeholder="Enter a display name" required/>
+            <input type="text" id="guestName" name="guestName"
+                   th:value="${guestName}" placeholder="Enter a display name"
+                   maxlength="24" required/>
           </div>
           <button type="submit" class="btn-primary">Continue as Guest</button>
         </form>
@@ -76,6 +79,10 @@
       document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
       document.getElementById('tab-' + name).classList.add('active');
     }
+
+    // If the server returned a guest error, open the guest tab automatically
+    const hasGuestError = /*[[${guestError != null}]]*/ false;
+    if (hasGuestError) switchTab('guest');
   </script>
 </body>
 </html>
