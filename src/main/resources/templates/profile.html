@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>My Profile</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: sans-serif; background: #f5f5f5; color: #333; }
+        .container { max-width: 560px; margin: 48px auto; padding: 0 16px; }
+        h1 { font-size: 22px; font-weight: 500; margin-bottom: 24px; }
+        h2 { font-size: 16px; font-weight: 500; margin-bottom: 16px; }
+        .card { background: #fff; border-radius: 10px; padding: 28px; margin-bottom: 24px;
+                border: 1px solid #e0e0e0; }
+        label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; margin-top: 14px; }
+        label:first-of-type { margin-top: 0; }
+        input[type=text], input[type=email], input[type=password], textarea {
+            width: 100%; padding: 9px 12px; border: 1px solid #ccc; border-radius: 6px;
+            font-size: 14px; font-family: inherit; }
+        input[readonly] { background: #f9f9f9; color: #777; cursor: not-allowed; }
+        textarea { resize: vertical; min-height: 90px; }
+        .btn { display: inline-block; padding: 9px 22px; border-radius: 6px; font-size: 14px;
+               font-weight: 500; cursor: pointer; border: none; margin-top: 18px; }
+        .btn-primary { background: #4f46e5; color: #fff; }
+        .btn-primary:hover { background: #4338ca; }
+        .btn-link { background: none; color: #4f46e5; padding: 0; font-size: 13px;
+                    text-decoration: underline; margin-top: 10px; cursor: pointer; border: none; }
+        .alert { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 16px; }
+        .alert-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .alert-error   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .meta { font-size: 12px; color: #999; margin-top: 6px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>My Profile</h1>
+
+    <!-- ── Success / error banners (set via RedirectAttributes) ── -->
+    <div th:if="${profileSuccess}" class="alert alert-success" th:text="${profileSuccess}"></div>
+    <div th:if="${profileError}"   class="alert alert-error"   th:text="${profileError}"></div>
+    <div th:if="${pwSuccess}"      class="alert alert-success" th:text="${pwSuccess}"></div>
+
+    <!-- ── Account info (read-only) ── -->
+    <div class="card">
+        <h2>Account</h2>
+        <label>Username</label>
+        <input type="text" th:value="${user.username}" readonly/>
+        <label>Email</label>
+        <input type="email" th:value="${user.email}" readonly/>
+        <p class="meta">Username and email cannot be changed here.</p>
+    </div>
+
+    <!-- ── Edit profile ── -->
+    <div class="card">
+        <h2>Edit Profile</h2>
+        <form th:action="@{/profile}" method="post">
+            <label for="displayName">Display name <span style="color:#aaa">(optional)</span></label>
+            <input type="text" id="displayName" name="displayName" maxlength="100"
+                   th:value="${user.displayName}" placeholder="How others see your name"/>
+
+            <label for="bio">Bio <span style="color:#aaa">(optional, max 500 chars)</span></label>
+            <textarea id="bio" name="bio" maxlength="500"
+                      th:text="${user.bio}" placeholder="Tell us something about yourself"></textarea>
+
+            <button type="submit" class="btn btn-primary">Save changes</button>
+        </form>
+    </div>
+
+    <!-- ── Change password ── -->
+    <div class="card">
+        <h2>Change Password</h2>
+        <p style="font-size:13px;color:#666;margin-bottom:4px;">
+            Keep your account secure with a strong password.
+        </p>
+        <a th:href="@{/profile/password}" class="btn btn-link">Change password →</a>
+    </div>
+
+    <a th:href="@{/dashboard}" style="font-size:13px;color:#666;">← Back to dashboard</a>
+</div>
+</body>
+</html>
