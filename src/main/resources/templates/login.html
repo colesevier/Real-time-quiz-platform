@@ -1,20 +1,81 @@
 <!doctype html>
 <html xmlns:th="http://www.thymeleaf.org">
-  <head>
-    <meta charset="utf-8" />
-    <title>Login</title>
-    <link rel="stylesheet" th:href="@{/static/css/styles.css}" />
-  </head>
-  <body>
-    <div class="container">
-      <h1>Login</h1>
-      <div th:if="${error}" class="error" th:text="${error}"></div>
-      <form method="post" action="/auth/login">
-        <label>Username: <input type="text" name="username" required/></label><br/>
-        <label>Password: <input type="password" name="password" required/></label><br/>
-        <button type="submit">Login</button>
-      </form>
-      <p><a href="/auth/register">Register</a></p>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login — QuizLive</title>
+  <link rel="stylesheet" th:href="@{/static/css/auth.css}" />
+</head>
+<body>
+  <div class="page-wrapper">
+
+    <!-- Left branding panel -->
+    <div class="panel-left">
+      <div class="brand">
+        <div class="brand-logo">🎯</div>
+        <h1>QuizLive</h1>
+        <p>Host and join real-time quizzes with friends, classmates, or colleagues.</p>
+      </div>
+      <div class="features">
+        <div class="feature-item"><span class="feature-dot"></span>Real-time multiplayer gameplay</div>
+        <div class="feature-item"><span class="feature-dot"></span>Live leaderboards and scoring</div>
+        <div class="feature-item"><span class="feature-dot"></span>Create quizzes from your files</div>
+      </div>
     </div>
-  </body>
+
+    <!-- Right form panel -->
+    <div class="panel-right">
+
+      <div class="tab-row">
+        <button class="tab-btn active" onclick="switchTab('login')">Sign In</button>
+        <button class="tab-btn" onclick="switchTab('guest')">Guest</button>
+      </div>
+
+      <!-- Login form -->
+      <div id="tab-login" class="form-section active">
+        <div th:if="${error}" class="error-box" th:text="${error}"></div>
+        <form method="post" action="/auth/login">
+          <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" placeholder="Enter your username" required/>
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" placeholder="Enter your password" required/>
+          </div>
+          <button type="submit" class="btn-primary">Sign In</button>
+        </form>
+        <div class="divider">or</div>
+        <p class="form-footer">Don't have an account? <a href="/auth/register">Register</a></p>
+      </div>
+
+      <!-- Guest form -->
+      <div id="tab-guest" class="form-section">
+        <p style="color: var(--gray-600); font-size:0.9rem; margin-bottom:24px; line-height:1.6;">
+          Join a game as a guest. You can always register later to save your scores.
+        </p>
+        <form method="post" action="/auth/guest">
+          <div class="form-group">
+            <label for="guestName">Your Name</label>
+            <input type="text" id="guestName" name="guestName" placeholder="Enter a display name" required/>
+          </div>
+          <button type="submit" class="btn-primary">Continue as Guest</button>
+        </form>
+        <div class="divider">or</div>
+        <button class="btn-ghost" onclick="switchTab('login')">Sign in to your account</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    function switchTab(name) {
+      document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', ['login','guest'][i] === name);
+      });
+      document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+    }
+  </script>
+</body>
 </html>

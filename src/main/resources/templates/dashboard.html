@@ -7,16 +7,31 @@
   </head>
   <body>
     <div class="container">
-      <h1>Your Dashboard</h1>
-      <div class="controls">
-        <a th:href="@{/create}" class="btn">Create Game</a>
-        <a th:href="@{/join}" class="btn">Join Game</a>
-        <a th:href="@{/auth/logout}" class="btn">Logout</a>
+
+      <!-- Guest view -->
+      <div th:if="${session.isGuest}">
+        <h1>Welcome, <span th:text="${session.username}">Guest</span>!</h1>
+        <p>You are browsing as a guest. <a href="/auth/register">Register</a> to save your progress.</p>
+        <div class="controls">
+          <a th:href="@{/join}" class="btn">Join Game</a>
+          <a th:href="@{/auth/logout}" class="btn">Logout</a>
+        </div>
       </div>
-      <section id="past-games">
-        <h2>Past Games</h2>
-        <div class="grid">No games yet</div>
-      </section>
+
+      <!-- Registered user view -->
+      <div th:unless="${session.isGuest}">
+        <h1>Welcome, <span th:text="${session.username}">User</span>!</h1>
+        <div class="controls">
+          <a th:href="@{/create}" class="btn">Create Game</a>
+          <a th:href="@{/join}" class="btn">Join Game</a>
+          <a th:href="@{/auth/logout}" class="btn">Logout</a>
+        </div>
+        <section id="past-games">
+          <h2>Past Games</h2>
+          <div class="grid">No games yet</div>
+        </section>
+      </div>
+
     </div>
   </body>
 </html>

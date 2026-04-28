@@ -50,4 +50,20 @@ public class UserDAO {
         User u = ou.get();
         return PasswordUtil.verify(password, u.getPasswordHash());
     }
+
+    public Optional<User> findByEmail(String email) throws SQLException {
+        String sql = "SELECT HEX(userID) as userID, username, email, passwordHash FROM users WHERE email = ?";
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, email);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String idHex = rs.getString("userID");
+                    UUID id = UUID.fromString(idFromHex(idHex));
+                    User u = new User(id, rs.getString("username"), rs.getString("passwordHash"), rs.getString("email"));
+                    return Optional.of(u);
+                }
+            }
+        }
+        return Optional.empty();
+    }
 }
