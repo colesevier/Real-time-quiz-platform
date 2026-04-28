@@ -11,14 +11,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import jakarta.servlet.http.HttpSession;
-import java.sql.SQLException;
 import java.util.Optional;
 import java.util.UUID;
 
 @Controller
 @RequestMapping("/auth")
 public class AuthController {
-    private final UserDAO userDAO = new UserDAO();
+    private final UserDAO userDAO;
+
+    public AuthController(UserDAO userDAO) {
+        this.userDAO = userDAO;
+    }
 
     @GetMapping("/login")
     public String login() {
@@ -26,7 +29,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public String doLogin(@RequestParam String username, @RequestParam String password, HttpSession session, Model model) throws SQLException {
+    public String doLogin(@RequestParam String username, @RequestParam String password, HttpSession session, Model model) {
         boolean ok = userDAO.validateCredentials(username, password);
         if (ok) {
             Optional<User> u = userDAO.findByUsername(username);
@@ -44,7 +47,7 @@ public class AuthController {
     public String register() { return "register"; }
 
     @PostMapping("/register")
-    public String doRegister(@RequestParam String username, @RequestParam String email, @RequestParam String password, @RequestParam String confirm, Model model) throws SQLException {
+    public String doRegister(@RequestParam String username, @RequestParam String email, @RequestParam String password, @RequestParam String confirm, Model model) {
         if (password == null || password.length() < 8) {
             model.addAttribute("error", "Password must be at least 8 characters.");
             return "register";

@@ -1,0 +1,33 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org">
+  <head>
+    <meta charset="utf-8" />
+    <title>Lobby</title>
+    <link rel="stylesheet" th:href="@{/css/styles.css}" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Waiting for host to start...</h1>
+      <p>
+        You're <strong th:text="${nickname}">player</strong> in
+        game <strong class="code" th:text="${code}">------</strong>.
+      </p>
+      <p>Status: <span id="status">connecting</span></p>
+
+      <h2>Players in lobby</h2>
+      <ul id="roster" class="roster"><li class="empty">No one yet</li></ul>
+
+      <div id="log" class="log"></div>
+      <p><a th:href="@{/dashboard}">Leave</a></p>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <script th:inline="javascript">
+      window.LOBBY_CODE = /*[[${code}]]*/ '';
+      window.LOBBY_ROLE = 'player';
+      window.LOBBY_NICKNAME = /*[[${nickname}]]*/ '';
+    </script>
+    <script th:src="@{/js/lobby.js}"></script>
+  </body>
+</html>

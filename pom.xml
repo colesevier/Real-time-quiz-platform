@@ -43,10 +43,10 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
-        <!-- JPA for future DAO use (optional) -->
+        <!-- JdbcTemplate for plain JDBC repositories (HikariCP comes for free) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
 
         <!-- MySQL driver -->
