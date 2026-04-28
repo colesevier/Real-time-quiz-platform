@@ -1,3 +1,5 @@
-.env
-target/
-process_log.txt
+.DS_Store
+.settings/
+.classpath
+.project
+src/main/webapp/META-INF/MANIFEST.MF
