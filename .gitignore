@@ -5,3 +5,4 @@
 src/main/webapp/META-INF/MANIFEST.MF
 /target/
 .env
+process_log.txt
