@@ -48,12 +48,16 @@ public class AuthController {
 
     @PostMapping("/register")
     public String doRegister(@RequestParam String username, @RequestParam String email, @RequestParam String password, @RequestParam String confirm, Model model) {
+        // Always repopulate so the form isn't blank on error
+        model.addAttribute("username", username);
+        model.addAttribute("email", email);
+
         if (password == null || password.length() < 8) {
             model.addAttribute("error", "Password must be at least 8 characters.");
             return "register";
         }
         if (!password.equals(confirm)) {
-            model.addAttribute("error", "Password and confirmation do not match.");
+            model.addAttribute("error", "Passwords do not match.");
             return "register";
         }
         if (userDAO.findByUsername(username).isPresent()) {
@@ -62,9 +66,13 @@ public class AuthController {
         }
 
         User u = new User(UUID.randomUUID(), username, PasswordUtil.hash(password), email);
-        boolean created = userDAO.register(u);
-        if (created) return "redirect:/auth/login";
-        model.addAttribute("error", "Registration failed.");
+        try {
+            boolean created = userDAO.register(u);
+            if (created) return "redirect:/auth/login";
+            model.addAttribute("error", "Registration failed. Please try again.");
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            model.addAttribute("error", "An account with that email already exists.");
+        }
         return "register";
     }
 

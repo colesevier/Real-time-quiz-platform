@@ -1,28 +1,104 @@
 <!doctype html>
 <html xmlns:th="http://www.thymeleaf.org">
-  <head>
-    <meta charset="utf-8" />
-    <title>Dashboard</title>
-    <link rel="stylesheet" th:href="@{/css/styles.css}" />
-  </head>
-  <body>
-    <div class="container">
-      <h1>Your Dashboard</h1>
-      <div class="controls">
-        <form method="post" action="/host/start" style="display:inline">
-          <button type="submit" class="btn">Create Game</button>
-        </form>
-        <a th:href="@{/join}" class="btn">Join Game</a>
-        <a th:href="@{/auth/logout}" class="btn">Logout</a>
-      </div>
-      <p class="hint">
-        "Create Game" seeds a sample 3-question quiz, opens a lobby, and gives you a 6-digit code.
-        Open another browser window in private mode, hit "Join Game", and enter the code.
-      </p>
-      <section id="past-games">
-        <h2>Past Games</h2>
-        <div class="grid">No games yet</div>
-      </section>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard — QuizLive</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" th:href="@{/css/dashboard.css}" />
+</head>
+<body>
+
+  <!-- ── HEADER ── -->
+  <header>
+    <a class="logo" href="/dashboard">
+      <div class="logo-icon">🎯</div>
+      <span class="logo-text">QuizLive</span>
+    </a>
+    <div class="nav-right">
+      <span class="nav-greeting">Hello, <strong th:text="${session.username}">User</strong></span>
+      <a class="nav-logout" th:href="@{/auth/logout}">Sign out</a>
     </div>
-  </body>
+  </header>
+
+  <!-- ── HERO ── -->
+  <div class="hero">
+    <div class="hero-inner">
+      <div class="hero-label">✦ Host Dashboard</div>
+      <h1>Ready to quiz?</h1>
+      <p class="hero-sub">Create a new game or jump into an existing one. Your players are waiting.</p>
+    </div>
+  </div>
+
+  <!-- ── ACTION CARDS ── -->
+  <div class="actions-bar">
+
+    <div class="action-card primary">
+      <div class="action-icon">🚀</div>
+      <div class="action-body">
+        <div class="action-title">Create a Game</div>
+        <div class="action-desc">Seed a quiz, get a 6-digit code, and share it with your players instantly.</div>
+        <form method="post" action="/host/start" style="display:inline">
+          <button type="submit" class="action-btn">Start hosting →</button>
+        </form>
+      </div>
+    </div>
+
+    <a class="action-card secondary" th:href="@{/join}" style="display:flex">
+      <div class="action-icon">🎮</div>
+      <div class="action-body">
+        <div class="action-title">Join a Game</div>
+        <div class="action-desc">Enter a 6-digit invite code to jump into someone else's live session.</div>
+        <span class="action-btn">Enter code →</span>
+      </div>
+    </a>
+
+  </div>
+
+  <!-- ── MAIN ── -->
+  <main class="main">
+
+    <!-- Stats row -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon">📋</div>
+        <div>
+          <div class="stat-value">0</div>
+          <div class="stat-label">Games created</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">👥</div>
+        <div>
+          <div class="stat-value">0</div>
+          <div class="stat-label">Total players hosted</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">⚡</div>
+        <div>
+          <div class="stat-value">—</div>
+          <div class="stat-label">Last session</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Past games -->
+    <div class="section-header">
+      <div class="section-title">
+        Past Games
+        <span class="badge">0 games</span>
+      </div>
+    </div>
+
+    <div class="empty-state">
+      <div class="empty-illustration">📭</div>
+      <h3>No games yet</h3>
+      <p>Your created games will appear here once you host your first session.</p>
+    </div>
+
+  </main>
+
+</body>
 </html>
