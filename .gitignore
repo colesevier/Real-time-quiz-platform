@@ -1,2 +1,3 @@
 .env
 target/
+process_log.txt
