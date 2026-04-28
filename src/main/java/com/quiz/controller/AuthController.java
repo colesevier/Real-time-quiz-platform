@@ -30,6 +30,10 @@ public class AuthController {
 
     @PostMapping("/login")
     public String doLogin(@RequestParam String username, @RequestParam String password, HttpSession session, Model model) {
+        if (username == null || username.isBlank() || password == null || password.isBlank()) {
+            model.addAttribute("error", "Username and password are required.");
+            return "login";
+        }
         boolean ok = userDAO.validateCredentials(username, password);
         if (ok) {
             Optional<User> u = userDAO.findByUsername(username);
@@ -46,44 +50,70 @@ public class AuthController {
     @GetMapping("/register")
     public String register() { return "register"; }
 
+    private static final java.util.regex.Pattern EMAIL_PATTERN =
+        java.util.regex.Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+
     @PostMapping("/register")
-    public String doRegister(@RequestParam String username, @RequestParam String email, @RequestParam String password, @RequestParam String confirm, Model model) {
-        if (password == null || password.length() < 8) {
+    public String doRegister(@RequestParam String username,
+                             @RequestParam String email,
+                             @RequestParam String password,
+                             @RequestParam String confirm,
+                             Model model) {
+        // Always repopulate so fields survive a validation error
+        model.addAttribute("username", username == null ? "" : username.trim());
+        model.addAttribute("email",    email    == null ? "" : email.trim());
+
+        String u = username == null ? "" : username.trim();
+        String e = email    == null ? "" : email.trim();
+        String p = password == null ? "" : password;
+        String c = confirm  == null ? "" : confirm;
+
+        // 1. Empty field checks
+        if (u.isEmpty() || e.isEmpty() || p.isEmpty() || c.isEmpty()) {
+            model.addAttribute("error", "All fields are required.");
+            return "register";
+        }
+
+        // 2. Username length (matches DB VARCHAR(50))
+        if (u.length() > 50) {
+            model.addAttribute("error", "Username must be 50 characters or fewer.");
+            return "register";
+        }
+
+        // 3. Email format
+        if (!EMAIL_PATTERN.matcher(e).matches()) {
+            model.addAttribute("error", "Please enter a valid email address.");
+            return "register";
+        }
+
+        // 4. Password length
+        if (p.length() < 8) {
             model.addAttribute("error", "Password must be at least 8 characters.");
             return "register";
         }
-        if (!password.equals(confirm)) {
-            model.addAttribute("error", "Password and confirmation do not match.");
+
+        // 5. Password confirmation
+        if (!p.equals(c)) {
+            model.addAttribute("error", "Passwords do not match.");
             return "register";
         }
-        if (userDAO.findByUsername(username).isPresent()) {
+
+        // 6. Username uniqueness
+        if (userDAO.findByUsername(u).isPresent()) {
             model.addAttribute("error", "Username already in use.");
             return "register";
         }
 
-        User u = new User(UUID.randomUUID(), username, PasswordUtil.hash(password), email);
-        boolean created = userDAO.register(u);
-        if (created) return "redirect:/auth/login";
-        model.addAttribute("error", "Registration failed.");
+        // 7. Persist — catch duplicate email at DB level
+        User newUser = new User(UUID.randomUUID(), u, PasswordUtil.hash(p), e);
+        try {
+            boolean created = userDAO.register(newUser);
+            if (created) return "redirect:/auth/login";
+            model.addAttribute("error", "Registration failed. Please try again.");
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            model.addAttribute("error", "An account with that email already exists.");
+        }
         return "register";
-    }
-
-    @PostMapping("/guest")
-    public String doGuest(@RequestParam String guestName, HttpSession session, Model model) {
-        String trimmed = guestName == null ? "" : guestName.trim();
-        if (trimmed.isEmpty()) {
-            model.addAttribute("guestError", "Please enter a display name.");
-            return "login";
-        }
-        if (trimmed.length() > 24) {
-            model.addAttribute("guestError", "Name must be 24 characters or fewer.");
-            model.addAttribute("guestName", trimmed);
-            return "login";
-        }
-        // Mark session as guest — no userID so host-only routes stay protected
-        session.setAttribute("guestName", trimmed);
-        session.setMaxInactiveInterval(30 * 60);
-        return "redirect:/join";
     }
 
     @GetMapping("/logout")
