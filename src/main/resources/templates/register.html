@@ -1,22 +1,69 @@
 <!doctype html>
 <html xmlns:th="http://www.thymeleaf.org">
-  <head>
-    <meta charset="utf-8" />
-    <title>Register</title>
-    <link rel="stylesheet" th:href="@{/css/styles.css}" />
-  </head>
-  <body>
-    <div class="container">
-      <h1>Register</h1>
-      <div th:if="${error}" class="error" th:text="${error}"></div>
-      <form method="post" action="/auth/register">
-        <label>Username: <input type="text" name="username" required/></label><br/>
-        <label>Email: <input type="email" name="email" required/></label><br/>
-        <label>Password: <input type="password" name="password" required/></label><br/>
-        <label>Confirm Password: <input type="password" name="confirm" required/></label><br/>
-        <button type="submit">Register</button>
-      </form>
-      <p><a href="/auth/login">Back to login</a></p>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Register — QuizLive</title>
+  <link rel="stylesheet" th:href="@{/css/auth.css}" />
+</head>
+<body>
+  <div class="page-wrapper">
+
+    <!-- Left panel -->
+    <div class="panel-left">
+      <div class="brand">
+        <div class="brand-logo">🎯</div>
+        <h1>Create your account</h1>
+        <p>Join thousands of players hosting and competing in real-time quizzes.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-text"><strong>Create an account</strong>Fill in your details below</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-text"><strong>Upload your content</strong>Turn documents into quizzes instantly</div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-text"><strong>Host or join</strong>Play live with anyone, anywhere</div>
+        </div>
+      </div>
     </div>
-  </body>
+
+    <!-- Right panel -->
+    <div class="panel-right">
+      <h2>Get started</h2>
+      <p class="subtitle">Create your free account in seconds</p>
+
+      <div th:if="${error}" class="error-box" th:text="${error}"></div>
+
+      <form method="post" action="/auth/register">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" placeholder="Choose a username" required/>
+        </div>
+        <div class="form-group">
+          <label for="email">Email Address</label>
+          <input type="email" id="email" name="email" placeholder="you@example.com" required/>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" placeholder="Min. 8 characters" required/>
+          </div>
+          <div class="form-group">
+            <label for="confirm">Confirm Password</label>
+            <input type="password" id="confirm" name="confirm" placeholder="Repeat password" required/>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary">Create Account</button>
+      </form>
+
+      <p class="form-footer">Already have an account? <a href="/auth/login">Sign in</a></p>
+    </div>
+
+  </div>
+</body>
 </html>
