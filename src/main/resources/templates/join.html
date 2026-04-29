@@ -2,23 +2,61 @@
 <html xmlns:th="http://www.thymeleaf.org">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Join Game</title>
-    <link rel="stylesheet" th:href="@{/css/styles.css}" />
+    <link rel="stylesheet" th:href="@{/css/game.css}" />
   </head>
   <body>
-    <div class="container">
-      <h1>Join Game</h1>
-      <div th:if="${error}" class="error" th:text="${error}"></div>
-      <form method="post" action="/join">
-        <label>Code:
-          <input type="text" name="code" th:value="${code}" maxlength="12" required autofocus />
-        </label><br/>
-        <label>Nickname:
-          <input type="text" name="nickname" th:value="${nickname}" maxlength="24" required />
-        </label><br/>
-        <button type="submit" class="btn">Join</button>
-      </form>
-      <p><a th:href="@{/dashboard}">Back to dashboard</a></p>
+    <div class="join-wrap">
+      <div class="join-card">
+
+        <!-- Logo Mark -->
+        <div class="join-logo">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+          </svg>
+        </div>
+
+        <h1>Join a Game</h1>
+        <p class="sub">Enter your game code and pick a nickname to play.</p>
+
+        <!-- Error -->
+        <div th:if="${error}" class="error" th:text="${error}"></div>
+
+        <form method="post" action="/join">
+          <div class="form-field">
+            <label for="code-input">Game Code</label>
+            <input
+              id="code-input"
+              class="code-input"
+              type="text"
+              name="code"
+              th:value="${code}"
+              maxlength="12"
+              required
+              autofocus
+              placeholder="XXXXXX"
+            />
+          </div>
+
+          <div class="form-field">
+            <label for="nickname-input">Nickname</label>
+            <input
+              id="nickname-input"
+              type="text"
+              name="nickname"
+              th:value="${nickname}"
+              maxlength="24"
+              required
+              placeholder="Enter your name"
+            />
+          </div>
+
+          <button type="submit" class="btn join-submit">Join Game →</button>
+        </form>
+
+        <a th:href="@{/dashboard}" class="join-back">← Back to dashboard</a>
+      </div>
     </div>
   </body>
 </html>

@@ -32,8 +32,22 @@
   </div>
 
   <!-- ── ACTION CARDS ── -->
-  <div class="actions-bar">
-
+<!-- ── FILE UPLOAD ── -->
+<div class="actions-bar" style="margin-top: 24px;">
+  <div class="upload-card">
+    <div class="upload-icon">📄</div>
+    <div class="upload-body">
+      <div class="upload-title">Generate Quiz from File</div>
+      <div class="upload-desc">Upload a PDF or PPTX and AI will generate questions automatically.</div>
+      <input type="text" id="upload-title" placeholder="Game title" />
+      <input type="file" id="upload-file" accept=".pdf,.pptx" />
+      <label for="upload-count" style="font-size:0.78rem;color:var(--gray-500);margin-bottom:6px;display:block;">Number of questions (1–20)</label>
+<input type="number" id="upload-count" min="1" max="20" value="5"
+  style="width:100%;padding:8px 12px;font-size:0.85rem;font-family:'Sora',sans-serif;border:1px solid var(--gray-200);border-radius:8px;color:var(--navy);margin-bottom:14px;outline:none;" />
+      <button type="button" id="upload-btn">Generate Questions →</button>
+      <div id="upload-status"></div>
+    </div>
+  </div>
     <div class="action-card primary">
       <div class="action-icon">🚀</div>
       <div class="action-body">
@@ -64,7 +78,7 @@
       <div class="stat-card">
         <div class="stat-icon">📋</div>
         <div>
-          <div class="stat-value">0</div>
+<div class="stat-value" th:text="${gameCount}">0</div>
           <div class="stat-label">Games created</div>
         </div>
       </div>
@@ -85,20 +99,72 @@
     </div>
 
     <!-- Past games -->
-    <div class="section-header">
-      <div class="section-title">
-        Past Games
-        <span class="badge">0 games</span>
-      </div>
-    </div>
+<div class="section-header">
+  <div class="section-title">
+    Past Games
+    <span class="badge" th:text="${gameCount} + ' games'">0 games</span>
+  </div>
+</div>
 
-    <div class="empty-state">
-      <div class="empty-illustration">📭</div>
-      <h3>No games yet</h3>
-      <p>Your created games will appear here once you host your first session.</p>
-    </div>
+<div th:if="${games.empty}" class="empty-state">
+  <div class="empty-illustration">📭</div>
+  <h3>No games yet</h3>
+  <p>Upload a file above to generate your first quiz.</p>
+</div>
+
+<div th:unless="${games.empty}" class="games-grid">
+  <div th:each="game : ${games}" class="game-card">
+    <div class="game-card-icon">🎯</div>
+    <div class="game-card-title" th:text="${game.gameTitle}">Game Title</div>
+    <div class="game-card-meta" th:text="${game.createdAt}">Created at</div>
+    <form method="post" th:action="@{'/host/start/' + ${game.gameID}}">
+      <button type="submit" class="action-btn">Host →</button>
+    </form>
+  </div>
+</div>
 
   </main>
+
+  <script>
+document.getElementById('upload-btn').addEventListener('click', async function () {
+  const file = document.getElementById('upload-file').files[0];
+  const title = document.getElementById('upload-title').value.trim();
+  const status = document.getElementById('upload-status');
+
+
+
+  if (!file) { status.textContent = 'Please select a file.'; return; }
+  if (!title) { status.textContent = 'Please enter a game title.'; return; }
+
+  status.textContent = 'Uploading and generating questions... this may take 30-60 seconds.';
+  document.getElementById('upload-btn').disabled = true;
+
+  const form = new FormData();
+  form.append('file', file);
+  form.append('title', title);
+
+  const count = Math.min(20, Math.max(1, parseInt(document.getElementById('upload-count').value) || 5));
+  form.append('count', count);
+
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: form });
+    const data = await res.json();
+    if (res.ok) {
+      status.style.color = '#0b6b40';
+      status.textContent = `Created "${data.title}" with ${data.questionsGenerated} questions! Refresh to see it.`;
+    } else {
+      status.style.color = '#c00';
+      status.textContent = 'Error: ' + (data.error || 'unknown') + ' — ' + (data.detail || '');
+    }
+  } catch (e) {
+    status.style.color = '#c00';
+    status.textContent = 'Request failed: ' + e.message;
+  } finally {
+    document.getElementById('upload-btn').disabled = false;
+  }
+});
+</script>
 
 </body>
 </html>
