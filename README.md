@@ -2,6 +2,49 @@
 
 A Kahoot-style live quiz built with **Spring Boot 3** (embedded Tomcat), **STOMP over WebSocket**, **MySQL 8**, and Thymeleaf. Hosts upload (eventually) study material, generate a quiz, and start a session with a 6-digit invite code; players join with a nickname and play in real time.
 
+# First-Time Setup Guide
+This guide will get the project running on your machine using Docker.
+-- Prerequisites --
+Install the following before starting:
+- Java 21 — the project requires exactly Java 21
+- Maven — for building the project
+- Docker Desktop — for running the app and database
+- Git — for cloning the repository
+-- Step 1: Clone the Repository --
+In terminal:
+      cd Desktop
+      git clone https://github.com/colesevier/Real-time-quiz-platform.git
+      cd Real-time-quiz-platform
+      git checkout develop
+-- Step 2: Create .env File --
+This file holds your database password locally and is never pushed to GitHub. 
+This file is included in the existing gitignore.
+In terminal:
+      echo "QUIZ_DB_PASS=CS201_group_4_password" > .env
+-- Step 3: Build the JAR --
+Make sure Docker Desktop is open, then run in terminal:
+      mvn -DskipTests package
+You should see BUILD SUCCESS at the end.
+-- Step 4: Start the App --
+In terminal:
+      docker compose up -d --build
+Verify both containers are running:
+      docker compose ps
+Both kahoot-mysql and kahoot-app should show status Up. The database is created and the schema is imported automatically — no manual database setup needed.
+-- Step 5: Open in Browser --
+In browser, type:
+http://localhost:8080/auth/register
+Register an account and start using the app.
+-- Starting the App --
+Every time you want to work on the project:
+1. Open Docker Desktop and wait for it to start
+2. In the project folder, run:
+      docker compose up -d
+-- Rebuilding After Code Changes --
+Any time you change Java source files, you need to rebuild:
+mvn -DskipTests package
+docker compose up -d --build
+
 ## What's implemented today
 
 **Authentication** ([AuthController](src/main/java/com/quiz/controller/AuthController.java))
