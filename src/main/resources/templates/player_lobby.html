@@ -2,21 +2,41 @@
 <html xmlns:th="http://www.thymeleaf.org">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Lobby</title>
-    <link rel="stylesheet" th:href="@{/css/styles.css}" />
+    <link rel="stylesheet" th:href="@{/css/game.css}" />
   </head>
   <body>
     <div class="container">
-      <h1>Waiting for host to start...</h1>
-      <p>
-        You're <strong th:text="${nickname}">player</strong> in
-        game <strong class="code" th:text="${code}">------</strong>.
-      </p>
-      <p>Status: <span id="status">connecting</span></p>
 
-      <h2>Players in lobby</h2>
-      <ul id="roster" class="roster"><li class="empty">No one yet</li></ul>
+      <!-- Waiting Hero -->
+      <div class="waiting-hero">
+        <div class="waiting-icon">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+          </svg>
+        </div>
+        <h1>Waiting for host to start&hellip;</h1>
+        <div class="meta">
+          You're <strong th:text="${nickname}">player</strong>
+          &nbsp;·&nbsp;
+          Game code: <strong class="code" th:text="${code}" style="font-size:1em; padding:2px 10px;">------</strong>
+        </div>
+        <p class="hint" style="margin-top:8px">Status: <span id="status">connecting</span></p>
+      </div>
 
+      <!-- Roster -->
+      <div class="card">
+        <div class="roster-header">
+          <h2>Players in Lobby</h2>
+          <span class="player-count-badge" id="roster-badge">0 joined</span>
+        </div>
+        <ul id="roster" class="roster">
+          <li class="empty">No one yet</li>
+        </ul>
+      </div>
+
+      <!-- Live Game Panel -->
       <section id="game-panel" class="game-panel hidden">
         <div class="game-header">
           <div>
@@ -42,12 +62,13 @@
           <h2>Final Podium</h2>
           <div id="podium" class="podium"></div>
           <p id="session-summary" class="hint"></p>
-          <p><a class="btn" th:href="@{/dashboard}">Leave Game</a></p>
+          <div class="controls" style="margin-top:20px">
+            <a class="btn" th:href="@{/dashboard}">← Leave Game</a>
+          </div>
         </div>
       </section>
 
       <div id="log" class="log"></div>
-      <p><a th:href="@{/dashboard}">Leave</a></p>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
@@ -59,5 +80,14 @@
     </script>
     <script th:src="@{/js/game.js}"></script>
     <script th:src="@{/js/lobby.js}"></script>
+    <script>
+      // Keep roster badge in sync
+      const obs = new MutationObserver(() => {
+        const count = document.querySelectorAll('#roster li:not(.empty)').length;
+        const badge = document.getElementById('roster-badge');
+        if (badge) badge.textContent = count + ' joined';
+      });
+      obs.observe(document.getElementById('roster'), { childList: true });
+    </script>
   </body>
 </html>
