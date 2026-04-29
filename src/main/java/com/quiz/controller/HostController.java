@@ -92,4 +92,15 @@ public class HostController {
         sample.forEach(questions::insert);
         return id;
     }
+
+    @PostMapping("/start/{gameId}")
+public String startGame(@PathVariable int gameId,
+                        @RequestParam(defaultValue = "20") int timePerQuestion,
+                        @RequestParam(defaultValue = "50") int maxPlayers,
+                        HttpSession session) {
+    UUID userId = (UUID) session.getAttribute("userID");
+    if (userId == null) return "redirect:/auth/login";
+    GameSession s = sessionService.createSession(gameId, userId, timePerQuestion, maxPlayers);
+    return "redirect:/host/" + s.getInviteCode();
+}
 }
