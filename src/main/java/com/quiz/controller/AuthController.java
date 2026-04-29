@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import jakarta.servlet.http.HttpSession;
+import org.springframework.web.util.HtmlUtils;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -49,6 +50,29 @@ public class AuthController {
 
     @GetMapping("/register")
     public String register() { return "register"; }
+
+    @PostMapping("/guest")
+    public String doGuest(@RequestParam(name = "guestName", required = false) String guestName,
+                          HttpSession session,
+                          Model model) {
+        String g = guestName == null ? "" : guestName.trim();
+        // Validate: non-empty and <= 24 chars (same as JoinController)
+        if (g.isEmpty()) {
+            model.addAttribute("guestError", "Please enter a display name.");
+            model.addAttribute("guestName", "");
+            return "login";
+        }
+        if (g.length() > 24) {
+            model.addAttribute("guestError", "Display name must be 24 characters or fewer.");
+            model.addAttribute("guestName", g);
+            return "login";
+        }
+
+        // Basic sanitization to avoid HTML injection in views. Views should still escape output.
+        String sanitized = HtmlUtils.htmlEscape(g);
+        session.setAttribute("guestName", sanitized);
+        return "redirect:/join";
+    }
 
     private static final java.util.regex.Pattern EMAIL_PATTERN =
         java.util.regex.Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
