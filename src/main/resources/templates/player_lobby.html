@@ -17,6 +17,34 @@
       <h2>Players in lobby</h2>
       <ul id="roster" class="roster"><li class="empty">No one yet</li></ul>
 
+      <section id="game-panel" class="game-panel hidden">
+        <div class="game-header">
+          <div>
+            <h2 id="game-status">Live Game</h2>
+            <p class="hint" id="question-count">Waiting for the first question</p>
+          </div>
+          <div class="timer" id="timer">--</div>
+        </div>
+
+        <div id="question-panel" class="question-panel hidden">
+          <h3 id="question-prompt"></h3>
+          <div id="choice-list" class="choice-list"></div>
+          <p id="answer-feedback" class="answer-feedback"></p>
+        </div>
+
+        <div id="leaderboard-panel" class="leaderboard-panel hidden">
+          <h2>Leaderboard</h2>
+          <ol id="leaderboard-list" class="leaderboard-list"></ol>
+        </div>
+
+        <div id="final-panel" class="final-panel hidden">
+          <h2>Final Podium</h2>
+          <div id="podium" class="podium"></div>
+          <p id="session-summary" class="hint"></p>
+          <p><a class="btn" th:href="@{/dashboard}">Leave Game</a></p>
+        </div>
+      </section>
+
       <div id="log" class="log"></div>
       <p><a th:href="@{/dashboard}">Leave</a></p>
     </div>
@@ -28,6 +56,7 @@
       window.LOBBY_ROLE = 'player';
       window.LOBBY_NICKNAME = /*[[${nickname}]]*/ '';
     </script>
+    <script th:src="@{/js/game.js}"></script>
     <script th:src="@{/js/lobby.js}"></script>
   </body>
 </html>

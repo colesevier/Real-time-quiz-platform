@@ -30,6 +30,7 @@ class GameSessionServiceTest {
     private InviteCodeService codes;
     private LobbyRegistry registry;
     private SimpMessagingTemplate broker;
+    private GameEngineService gameEngine;
     private GameSessionService svc;
 
     private final UUID hostId = UUID.randomUUID();
@@ -42,7 +43,8 @@ class GameSessionServiceTest {
         codes = mock(InviteCodeService.class);
         registry = mock(LobbyRegistry.class);
         broker = mock(SimpMessagingTemplate.class);
-        svc = new GameSessionService(games, sessions, codes, registry, broker);
+        gameEngine = mock(GameEngineService.class);
+        svc = new GameSessionService(games, sessions, codes, registry, broker, gameEngine);
     }
 
     @Test
@@ -80,6 +82,7 @@ class GameSessionServiceTest {
                 () -> svc.startSession("999000", hostId));
         verify(sessions, never()).updateStatus(any(), any());
         verify(broker, never()).convertAndSend(anyString(), any(LobbyEvent.class));
+        verify(gameEngine, never()).startGame(any(), any());
     }
 
     @Test
@@ -118,6 +121,7 @@ class GameSessionServiceTest {
         verify(sessions).updateStatus("999000", "ACTIVE");
         verify(broker).convertAndSend(eq("/topic/host/999000"), any(LobbyEvent.class));
         verify(broker).convertAndSend(eq("/topic/game/999000"), any(LobbyEvent.class));
+        verify(gameEngine).startGame("999000", hostId);
     }
 
     @Test
@@ -131,6 +135,7 @@ class GameSessionServiceTest {
         svc.cancelSession("999000", hostId);
 
         verify(sessions).updateStatus("999000", "FINISHED");
+        verify(gameEngine).discardGame("999000");
         verify(registry).disposeLobby("999000");
         verify(broker, times(2)).convertAndSend(anyString(), any(LobbyEvent.class));
     }

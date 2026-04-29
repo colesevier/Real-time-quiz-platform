@@ -14,9 +14,14 @@ A Kahoot-style live quiz built with **Spring Boot 3** (embedded Tomcat), **STOMP
 - Host controls: **Start**, **Cancel**, **Kick** (per-player). Start button is disabled until at least one player joins (per spec edge case).
 - Personal targeted events on `/user/queue/lobby` (e.g. "you were kicked", "lobby full")
 
+**Live scoring / leaderboard**
+- Starting a lobby now initializes a server-side game engine, broadcasts each question without the correct answer, accepts player answers through `/app/game/{code}/submit`, and scores first submissions only.
+- Questions close on the server timer. The server calculates speed-weighted points, broadcasts `leaderboard_update` events, and exposes the same payload on `/topic/game/{code}/leaderboard`.
+- When the last question closes, the session is marked `FINISHED`, a `final_results` podium payload is broadcast, and results are also published on `/topic/game/{code}/results`.
+
 ### What is *not* built yet (planned)
 - Manage Game (upload material → review/edit questions). Today the dashboard's Create Game seeds a hardcoded sample quiz so the lobby is testable.
-- The question loop / scoring / intermediate leaderboard / final podium (the **Game Session Manager** in the design doc).
+- Persistent per-player result history and CSV export. Scores are currently held in memory for the active session and emitted over STOMP.
 - Pause/Resume mid-game, host-disconnect grace timer, idle-session sweep.
 - Login-as-guest.
 
@@ -121,10 +126,11 @@ quiz.lobby.session-idle-sweep-minutes=120
 mvn test
 ```
 
-20 unit tests covering:
+23 unit tests covering:
 - [RandomInviteCodeServiceTest](src/test/java/com/quiz/service/RandomInviteCodeServiceTest.java) — code format, collision retry, exhaustion
 - [InMemoryLobbyRegistryTest](src/test/java/com/quiz/service/InMemoryLobbyRegistryTest.java) — capacity boundary, **100-thread concurrency proof** (50-cap room → exactly 50 OKs + 50 FULLs), kick, reattach on reconnect
 - [GameSessionServiceTest](src/test/java/com/quiz/service/GameSessionServiceTest.java) — host authorization, status guards, empty-lobby start rejection
+- [GameEngineServiceTest](src/test/java/com/quiz/service/GameEngineServiceTest.java) — question payload safety, speed-weighted scoring, final podium
 
 Tests use Mockito's subclass mock maker (configured at [src/test/resources/mockito-extensions/](src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker)) for compatibility with newer JDKs.
 
@@ -137,7 +143,7 @@ src/main/java/com/quiz/
 ├── controller/                   # HTTP routes (auth, dashboard, host, join, player lobby)
 ├── dao/UserDAO.java              # JdbcTemplate-backed user repo
 ├── repository/                   # JdbcTemplate repos for Game / Question / GameSession
-├── service/                      # GameSessionService, InviteCodeService, LobbyRegistry
+├── service/                      # GameSessionService, GameEngineService, InviteCodeService, LobbyRegistry
 ├── websocket/                    # LobbyStompController, StompPrincipal, GameStompController
 ├── model/                        # Plain POJOs mirroring the DB tables
 ├── dto/LobbyEvent.java           # Versioned envelope for STOMP broadcasts

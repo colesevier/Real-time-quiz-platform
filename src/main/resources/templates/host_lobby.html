@@ -25,10 +25,40 @@
 
       <div class="controls">
         <button type="button" class="btn" id="start-btn" disabled>Start Game</button>
+        <button type="button" class="btn hidden" id="next-question-btn" disabled>Next Question</button>
+        <button type="button" class="btn btn-warn hidden" id="finish-game-btn">Finish Game</button>
         <form method="post" th:action="@{'/host/' + ${code} + '/cancel'}" style="display:inline">
           <button type="submit" class="btn btn-warn">Cancel Game</button>
         </form>
       </div>
+
+      <section id="game-panel" class="game-panel hidden">
+        <div class="game-header">
+          <div>
+            <h2 id="game-status">Live Game</h2>
+            <p class="hint" id="question-count">Waiting for the first question</p>
+          </div>
+          <div class="timer" id="timer">--</div>
+        </div>
+
+        <div id="question-panel" class="question-panel hidden">
+          <h3 id="question-prompt"></h3>
+          <div id="choice-list" class="choice-list host-choices"></div>
+        </div>
+
+        <div id="leaderboard-panel" class="leaderboard-panel hidden">
+          <h2>Leaderboard</h2>
+          <ol id="leaderboard-list" class="leaderboard-list"></ol>
+        </div>
+
+        <div id="final-panel" class="final-panel hidden">
+          <h2>Final Podium</h2>
+          <div id="podium" class="podium"></div>
+          <p id="session-summary" class="hint"></p>
+          <button type="button" class="btn" id="export-results-btn">Export Results CSV</button>
+          <p><a class="btn" th:href="@{/dashboard}">Return to Dashboard</a></p>
+        </div>
+      </section>
 
       <div id="log" class="log"></div>
     </div>
@@ -39,6 +69,7 @@
       window.LOBBY_CODE = /*[[${code}]]*/ '';
       window.LOBBY_ROLE = 'host';
     </script>
+    <script th:src="@{/js/game.js}"></script>
     <script th:src="@{/js/lobby.js}"></script>
   </body>
 </html>

@@ -20,17 +20,20 @@ public class GameSessionService {
     private final InviteCodeService codes;
     private final LobbyRegistry registry;
     private final SimpMessagingTemplate broker;
+    private final GameEngineService gameEngine;
 
     public GameSessionService(GameRepository games,
                               GameSessionRepository sessions,
                               InviteCodeService codes,
                               LobbyRegistry registry,
-                              SimpMessagingTemplate broker) {
+                              SimpMessagingTemplate broker,
+                              GameEngineService gameEngine) {
         this.games = games;
         this.sessions = sessions;
         this.codes = codes;
         this.registry = registry;
         this.broker = broker;
+        this.gameEngine = gameEngine;
     }
 
     /** Host creates a session for a game they own. Returns the persisted session row. */
@@ -53,6 +56,7 @@ public class GameSessionService {
         Map<String, Object> payload = Map.of("code", code);
         broker.convertAndSend("/topic/host/" + code, new LobbyEvent("started", payload));
         broker.convertAndSend("/topic/game/" + code, new LobbyEvent("started", payload));
+        gameEngine.startGame(code, hostUserId);
     }
 
     public void cancelSession(String code, UUID hostUserId) {
@@ -62,6 +66,7 @@ public class GameSessionService {
         Map<String, Object> payload = Map.of("code", code, "reason", "host_cancelled");
         broker.convertAndSend("/topic/host/" + code, new LobbyEvent("cancelled", payload));
         broker.convertAndSend("/topic/game/" + code, new LobbyEvent("cancelled", payload));
+        gameEngine.discardGame(code);
         registry.disposeLobby(code);
     }
 

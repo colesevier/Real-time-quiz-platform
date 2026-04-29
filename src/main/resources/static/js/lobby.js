@@ -52,6 +52,11 @@
     stomp.send(destination, {}, JSON.stringify(body || {}));
   }
 
+  const gameView = window.QuizGameView;
+  if (gameView) {
+    gameView.init({ code: code, role: role, nickname: nickname, send: send });
+  }
+
   function sendKick(targetNick) {
     send('/app/lobby/' + code + '/kick', { nickname: targetNick });
   }
@@ -67,6 +72,11 @@
     });
 
     stomp.subscribe('/user/queue/lobby', function (frame) {
+      const ev = JSON.parse(frame.body);
+      handlePersonalEvent(ev);
+    });
+
+    stomp.subscribe('/user/queue/game', function (frame) {
       const ev = JSON.parse(frame.body);
       handlePersonalEvent(ev);
     });
@@ -90,6 +100,8 @@
   });
 
   function handleLobbyEvent(ev) {
+    if (gameView && gameView.handleEvent(ev)) return;
+
     switch (ev.type) {
       case 'player_joined':
       case 'player_left':
@@ -98,9 +110,8 @@
         break;
       case 'started':
         if (statusEl) statusEl.textContent = 'ACTIVE';
+        if (gameView) gameView.showGamePanel();
         log('game started');
-        // Question loop UI is the next feature; for now just show a notice.
-        alert('Game started! (question loop UI not built yet)');
         break;
       case 'cancelled':
         if (statusEl) statusEl.textContent = 'cancelled';
@@ -114,6 +125,8 @@
   }
 
   function handlePersonalEvent(ev) {
+    if (gameView && gameView.handleEvent(ev)) return;
+
     if (ev.type === 'kicked') {
       alert('You were removed from the lobby.');
       window.location.href = '/dashboard';
