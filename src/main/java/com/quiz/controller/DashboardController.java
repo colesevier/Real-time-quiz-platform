@@ -14,4 +14,8 @@ public class DashboardController {
         }
         return "dashboard";
     }
+    @GetMapping("/")
+    public String root() {
+        return "redirect:/auth/login";
+    }
 }
