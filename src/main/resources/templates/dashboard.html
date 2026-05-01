@@ -113,11 +113,37 @@
 </div>
 
 <div th:unless="${games.empty}" class="games-grid">
-  <div th:each="game : ${games}" class="game-card">
+  <!-- Display grouped games, with latest instance shown by default -->
+  <div th:each="group : ${groupedGames}" class="game-card">
     <div class="game-card-icon">🎯</div>
-    <div class="game-card-title" th:text="${game.gameTitle}">Game Title</div>
-    <div class="game-card-meta" th:text="${game.createdAt}">Created at</div>
-    <form method="post" th:action="@{'/host/start/' + ${game.gameID}}">
+    <div class="game-card-title" th:text="${group.gameTitle}">Game Title</div>
+    
+    <!-- Show count if there are duplicates -->
+    <div th:if="${group.count > 1}" class="game-card-badge" th:text="${group.count} + ' versions'">
+      Multiple versions
+    </div>
+    
+    <div class="game-card-meta" th:text="${#temporals.format(group.latest.createdAt, 'MMM d, yyyy HH:mm')}">
+      Created at
+    </div>
+    
+    <!-- Show dropdown/expand if there are multiple versions -->
+    <div th:if="${group.count > 1}" class="game-card-versions">
+      <details>
+        <summary>View other versions</summary>
+        <ul class="version-list">
+          <li th:each="game, iterStat : ${group.games}" th:if="${iterStat.index > 0}">
+            <span class="version-date" th:text="${#temporals.format(game.createdAt, 'MMM d, yyyy')}"></span>
+            <form method="post" th:action="@{'/host/start/' + ${game.gameID}}" style="display:inline;">
+              <button type="submit" class="small-btn">Host</button>
+            </form>
+          </li>
+        </ul>
+      </details>
+    </div>
+    
+    <!-- Host button for latest version -->
+    <form method="post" th:action="@{'/host/start/' + ${group.latest.gameID}}">
       <button type="submit" class="action-btn">Host →</button>
     </form>
   </div>

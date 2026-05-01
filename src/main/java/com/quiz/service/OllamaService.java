@@ -39,7 +39,8 @@ String body = mapper.writeValueAsString(
                 .put("num_predict", 300 * count) // ~300 tokens per question
 );
 
-        // Call Ollama
+        // Call Ollama API at /api/generate endpoint
+        // Note: Ollama uses /api/generate (not /api/chat) for text generation
         URL url = new URL(baseUrl + "/api/generate");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
@@ -52,8 +53,18 @@ String body = mapper.writeValueAsString(
             os.write(body.getBytes(StandardCharsets.UTF_8));
         }
 
+        // Check for connection errors
+        int statusCode = conn.getResponseCode();
+        if (statusCode != 200) {
+            String errorMsg = new String(conn.getErrorStream() != null 
+                ? conn.getErrorStream().readAllBytes() 
+                : "HTTP ".concat(String.valueOf(statusCode)).getBytes(), StandardCharsets.UTF_8);
+            throw new RuntimeException("Ollama API error (" + statusCode + "): " + errorMsg + 
+                    "\nMake sure Ollama is running at " + baseUrl + " with model '" + model + "'");
+        }
+
         String raw = new String(conn.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-return parseResponse(gameId, raw, count);
+        return parseResponse(gameId, raw, count);
     }
 
 private String buildPrompt(String text, int count) {
@@ -84,8 +95,23 @@ private String buildPrompt(String text, int count) {
 }
 
 private List<Question> parseResponse(int gameId, String raw, int count) throws Exception {
+    // Handle empty response
+    if (raw == null || raw.trim().isEmpty()) {
+        throw new RuntimeException("Ollama returned empty response. Check that model '" + model + "' exists and Ollama is running.");
+    }
+
     JsonNode root = mapper.readTree(raw);
+    
+    // Check for error in response
+    if (root.has("error")) {
+        throw new RuntimeException("Ollama error: " + root.path("error").asText());
+    }
+    
     String responseText = root.path("response").asText();
+    
+    if (responseText.isEmpty()) {
+        throw new RuntimeException("Ollama did not generate a response. Model may be slow or unresponsive.");
+    }
 
     // Strip markdown fences
     responseText = responseText
@@ -95,14 +121,17 @@ private List<Question> parseResponse(int gameId, String raw, int count) throws E
 
     // Find start of array
     int start = responseText.indexOf('[');
-    if (start == -1) throw new RuntimeException("No JSON array found in model response: "
-            + responseText.substring(0, Math.min(200, responseText.length())));
+    if (start == -1) {
+        // If no array found, log raw response for debugging
+        String preview = responseText.substring(0, Math.min(300, responseText.length()));
+        throw new RuntimeException("No JSON array found in model response. Got: " + preview);
+    }
 
     responseText = responseText.substring(start);
 
     // Find the last complete object and close the array there
     int lastBrace = responseText.lastIndexOf('}');
-    if (lastBrace == -1) throw new RuntimeException("No complete question objects found");
+    if (lastBrace == -1) throw new RuntimeException("No complete question objects found in response");
 
     // Check if array closes properly after last brace
     int closingBracket = responseText.indexOf(']', lastBrace);
@@ -115,25 +144,42 @@ private List<Question> parseResponse(int gameId, String raw, int count) throws E
     }
 
     JsonNode array = mapper.readTree(responseText);
+    
+    if (!array.isArray()) {
+        throw new RuntimeException("Expected JSON array, got: " + array.getNodeType());
+    }
+    
     List<Question> questions = new ArrayList<>();
 
     for (JsonNode node : array) {
         // Skip incomplete nodes missing required fields
-        if (node.path("question").isMissingNode() || node.path("A").isMissingNode()) continue;
+        if (node.path("question").isMissingNode() || node.path("A").isMissingNode()) {
+            continue;
+        }
 
         String answer = node.path("answer").asText("A").toUpperCase().trim();
         if (!answer.matches("[ABCD]")) answer = "A";
 
-        questions.add(new Question(
-                gameId,
-                node.path("question").asText(),
-                answer.charAt(0),
-                node.path("A").asText(),
-                node.path("B").asText(),
-                node.path("C").asText(),
-                node.path("D").asText()
-        ));
+        try {
+            questions.add(new Question(
+                    gameId,
+                    node.path("question").asText(),
+                    answer.charAt(0),
+                    node.path("A").asText(),
+                    node.path("B").asText(),
+                    node.path("C").asText(),
+                    node.path("D").asText()
+            ));
+        } catch (Exception e) {
+            // Skip malformed questions
+            continue;
+        }
     }
+    
+    if (questions.isEmpty()) {
+        throw new RuntimeException("No valid questions could be parsed from Ollama response");
+    }
+    
     return questions.stream().limit(count).collect(java.util.stream.Collectors.toList());
 }
 }
