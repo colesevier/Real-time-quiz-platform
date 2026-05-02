@@ -1,0 +1,255 @@
+# AI-Assisted Development Log
+# Real-Time Quiz Platform - Spring Boot STOMP WebSocket Application
+# Name: Cheng Siye
+# Dates: April 2026
+
+================================================================================
+SESSION 1: Profile & Account Management Design
+================================================================================
+
+PROMPT 1:
+"I need to implement a Profile & Account Management module for a Spring Boot
+quiz platform. The existing User model only has username, email, and password.
+What fields and endpoints should I add?"
+
+AI RESPONSE SUMMARY:
+- Extend User model with optional displayName and bio fields
+- Add ProfileDAO for profile-specific queries separate from AuthDAO
+- Create ProfileController with GET/POST /profile and /profile/password
+- Use RedirectAttributes (flash scope) for success/error messages across redirects
+
+WHAT I LEARNED:
+- Separating ProfileDAO from UserDAO keeps responsibilities clear
+- Flash attributes (RedirectAttributes) prevent form resubmission on refresh
+- displayName should fall back to username when not set (getEffectiveName())
+
+CODE SNIPPET USED:
+```java
+@GetMapping
+public String showProfile(HttpSession session, Model model) {
+    UUID userID = resolveUser(session);
+    if (userID == null) return "redirect:/auth/login";
+    Optional<User> userOpt = profileDAO.findById(userID);
+    if (userOpt.isEmpty()) return "redirect:/auth/login";
+    model.addAttribute("user", userOpt.get());
+    return "profile";
+}
+```
+
+ISSUES ENCOUNTERED:
+- Initial User model used byte[] for userID instead of UUID
+- Needed to handle the case where displayName is null gracefully in templates
+
+HOW I FIXED IT:
+- Added getEffectiveName() to User model as a convenience method
+- Used th:value="${user.displayName}" with null-safe Thymeleaf expressions
+- Followed same UUID-to-hex conversion pattern as existing UserDAO
+
+FILES CREATED:
+- src/main/java/com/quiz/model/User.java (updated with displayName, bio)
+- src/main/java/com/quiz/dao/ProfileDAO.java
+- src/main/java/com/quiz/controller/ProfileController.java
+- src/main/resources/templates/profile.html
+- src/main/resources/templates/profile_password.html
+
+--------------------------------------------------------------------------------
+
+PROMPT 2:
+"How do I safely implement a change password feature that verifies the old
+password before updating to the new one?"
+
+AI RESPONSE SUMMARY:
+- Fetch current passwordHash from DB and verify with BCrypt before updating
+- Never store or compare plaintext passwords
+- Validate new password length and confirmation match at Controller level
+- Return false (not exception) when old password is wrong
+
+WHAT I LEARNED:
+- Password verification must happen at DAO level using BCrypt.checkpw()
+- Controller handles user-facing validation (length, confirmation match)
+- DAO handles credential verification (old password correct or not)
+- Separating these two layers makes testing much easier
+
+CODE SNIPPET USED:
+```java
+public boolean changePassword(UUID userID, String oldPassword, String newPassword) {
+    String fetchSql = "SELECT passwordHash FROM users " +
+                      "WHERE userID = UNHEX(REPLACE(?, '-', ''))";
+    String currentHash = jdbc.query(fetchSql, rs -> {
+        if (!rs.next()) return null;
+        return rs.getString("passwordHash");
+    }, userID.toString());
+
+    if (currentHash == null || !PasswordUtil.verify(oldPassword, currentHash)) {
+        return false;
+    }
+    String updateSql = "UPDATE users SET passwordHash = ? " +
+                       "WHERE userID = UNHEX(REPLACE(?, '-', ''))";
+    return jdbc.update(updateSql, PasswordUtil.hash(newPassword), userID.toString()) == 1;
+}
+```
+
+ISSUES ENCOUNTERED:
+- First version threw an exception when old password was wrong (bad UX)
+- Needed to handle null currentHash when userID doesn't exist in DB
+
+HOW I FIXED IT:
+- Changed to return false instead of throwing exception on wrong password
+- Added null check for currentHash before calling BCrypt.checkpw()
+- Controller redirects with flash error message when DAO returns false
+
+FILES MODIFIED:
+- src/main/java/com/quiz/dao/ProfileDAO.java (changePassword method)
+- src/main/java/com/quiz/controller/ProfileController.java (POST /profile/password)
+
+================================================================================
+SESSION 2: Database Schema Migration
+================================================================================
+
+PROMPT 3:
+"The existing schema.sql doesn't have displayName or bio columns. How do I
+add them without breaking the existing codebase?"
+
+AI RESPONSE SUMMARY:
+- Add columns directly to schema.sql for clean installs
+- Use ALTER TABLE for teammates who already have the DB set up
+- Make both columns nullable with DEFAULT NULL so existing rows are unaffected
+- Communicate schema changes to teammates clearly
+
+WHAT I LEARNED:
+- Adding nullable columns with DEFAULT NULL is non-breaking for existing data
+- Schema changes need to be communicated to all team members
+- In early development, DROP and recreate is simpler than migration scripts
+- Tools like Flyway can automate this in production but are overkill for coursework
+
+SQL USED:
+```sql
+ALTER TABLE users
+    ADD COLUMN displayName VARCHAR(100) DEFAULT NULL,
+    ADD COLUMN bio         VARCHAR(500) DEFAULT NULL;
+```
+
+ISSUES ENCOUNTERED:
+- Teammates already had the kahoot database set up without the new columns
+- ProfileDAO queries for displayName and bio would fail without the columns
+
+HOW I FIXED IT:
+- Updated schema.sql directly with the new columns
+- Informed teammates to DROP DATABASE kahoot and re-run schema.sql
+- Tested by running DESCRIBE users to confirm columns were added correctly
+
+FILES MODIFIED:
+- sql/schema.sql (added displayName and bio to users table)
+
+================================================================================
+SESSION 3: Unit Testing Edge Cases
+================================================================================
+
+PROMPT 4:
+"What edge cases should I test for the Profile and Game Session modules?
+How do I write JUnit tests that cover both the DAO and Controller layers?"
+
+AI RESPONSE SUMMARY:
+- Use Mockito @Mock for Controller tests (no DB needed)
+- Use real JdbcTemplate with test DB for DAO integration tests
+- Test unauthenticated access to protected endpoints
+- Test boundary values (bio exactly 500 chars, bio 501 chars)
+- Test Game Session edge cases: empty lobby, wrong host, already active
+
+WHAT I LEARNED:
+- Mockito @InjectMocks automatically injects mocks into the class under test
+- RedirectAttributes can be mocked to verify flash messages
+- Integration tests need @BeforeEach setup and @AfterEach cleanup to avoid dirty data
+- Testing both layers (Controller + DAO) gives better coverage than just one
+
+CODE SNIPPET USED:
+```java
+@Test
+void updateProfile_bioOver500Chars_redirectsWithError() {
+    when(session.getAttribute("userID")).thenReturn(testID);
+    String tooLong = "x".repeat(501);
+
+    String view = controller.updateProfile("Name", tooLong, session, flash);
+    assertEquals("redirect:/profile", view);
+    verify(flash).addFlashAttribute("profileError", "Bio must be 500 characters or fewer.");
+    verifyNoInteractions(profileDAO); // should not reach DAO
+}
+```
+
+ISSUES ENCOUNTERED:
+- GameSessionService tests required mocking SimpMessagingTemplate (WebSocket broker)
+- InMemoryLobbyRegistry tests needed to be run without Spring context
+
+HOW I FIXED IT:
+- Added @Mock SimpMessagingTemplate broker to GameSessionServiceTest
+- Instantiated InMemoryLobbyRegistry directly (new InMemoryLobbyRegistry()) in tests
+- Used @AfterEach in ProfileDAOTest to clean up inserted test rows
+
+TESTS ADDED:
+- src/test/java/com/quiz/ProfileControllerTest.java (14 test cases)
+- src/test/java/com/quiz/ProfileDAOTest.java (9 test cases, requires DB)
+- src/test/java/com/quiz/GameSessionServiceTest.java (15 test cases)
+
+KEY EDGE CASES COVERED:
+- Unauthenticated access to /profile and /profile/password → redirect to login
+- Bio exactly 500 characters → success
+- Bio 501 characters → error, DAO never called
+- Wrong old password → error, password unchanged in DB
+- Empty lobby when host tries to start → EmptyLobbyException
+- Session already ACTIVE when host tries to start → IllegalSessionStateException
+- Duplicate nickname in lobby → NICKNAME_TAKEN
+- Lobby at max capacity → FULL
+- Player disconnects → removed from roster via leaveBySession()
+- Non-host tries to start/cancel/kick → HostMismatchException
+
+================================================================================
+REFLECTION
+================================================================================
+
+Most useful AI assistance:
+- Designing the ProfileDAO and ProfileController structure to match existing patterns
+- Writing comprehensive JUnit tests covering edge cases I hadn't considered
+- Understanding how to safely implement password change with BCrypt verification
+
+Challenges solved with AI help:
+- Figuring out the correct UUID-to-hex SQL pattern used by the existing codebase
+- Understanding flash attributes (RedirectAttributes) for post-redirect-get pattern
+- Identifying which Game Session edge cases to test given teammates' existing code
+
+What I would do differently:
+- Add schema migration tool (Flyway) from the start to avoid manual ALTER TABLE
+- Add email update functionality to the profile page
+- Add profile picture upload support using multipart file handling
+
+Key concepts learned:
+- Post-Redirect-Get pattern using RedirectAttributes to prevent form resubmission
+- BCrypt password verification flow (fetch hash → verify → update)
+- Nullable column additions are non-breaking for existing DB rows
+- Mockito-based Controller testing without needing a running Spring context
+- Fine-grained testing of concurrent lobby operations (InMemoryLobbyRegistry)
+
+Code quality improvements:
+- Separated profile concerns from authentication (ProfileDAO vs UserDAO)
+- Added getEffectiveName() helper to keep display logic out of templates
+- Validated bio/displayName at Controller level before hitting the DB
+- Comprehensive test coverage for both happy path and error cases
+
+Time spent: ~8 hours
+AI tools used: Claude AI
+
+Rubric items directly addressed:
+- User Login Functionality (3 pts): Profile and password change tied to authenticated session
+- Design & Development Decisions (10 pts): Separated ProfileDAO from UserDAO, explained rationale
+- Skills and Tools (5 pts): JUnit 5, Mockito, Spring JdbcTemplate, BCrypt, Thymeleaf
+
+Files contributed:
+- src/main/java/com/quiz/model/User.java (extended with profile fields)
+- src/main/java/com/quiz/dao/ProfileDAO.java (profile read/update/password change)
+- src/main/java/com/quiz/controller/ProfileController.java (profile and password endpoints)
+- src/main/resources/templates/profile.html (profile view and edit form)
+- src/main/resources/templates/profile_password.html (password change form)
+- sql/schema.sql (added displayName and bio columns)
+- src/test/java/com/quiz/ProfileControllerTest.java
+- src/test/java/com/quiz/ProfileDAOTest.java
+- src/test/java/com/quiz/GameSessionServiceTest.java
+
