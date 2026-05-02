@@ -31,7 +31,7 @@ Verify you are on the correct branch:
 
 ```bash
 git branch
-# Should show: * develop
+# Should show: * main
 ```
 
 ### 2. Install Ollama & Pull the Model
