@@ -468,14 +468,14 @@ header {
   align-items: flex-start;
   gap: 20px;
   border: 1px solid var(--gray-200);
-  border-top: 3px solid var(--success);
+  border-top: 3px solid var(--blue);
 }
 
 .upload-icon {
   width: 52px;
   height: 52px;
   border-radius: 12px;
-  background: #ecfdf5;
+  background: var(--ice);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -522,7 +522,7 @@ header {
 }
 
 #upload-btn {
-  background: var(--success);
+  background: var(--blue);
   color: var(--white);
   padding: 9px 20px;
   border-radius: 8px;
@@ -534,7 +534,7 @@ header {
   transition: all 0.2s;
 }
 
-#upload-btn:hover { background: #047857; }
+#upload-btn:hover { background: var(--navy-mid); }
 #upload-btn:disabled { background: var(--gray-500); cursor: not-allowed; }
 
 #upload-status {
