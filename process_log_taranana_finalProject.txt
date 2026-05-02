@@ -1,0 +1,644 @@
+# AI-Assisted Development Log
+# Real-Time Quiz Platform - Final Project
+# Student Name: Taran Anand
+# Date: April 2026
+
+================================================================================
+SESSION 1: Kahoot-Style Final Podium
+================================================================================
+
+PROMPT 1:
+"Help me implement a Kahoot-Style Final Podium screen"
+
+AI RESPONSE SUMMARY:
+- Existing podium CSS was minimal — just colored boxes with no animation
+- Needed: dark purple background, stepped podium heights, medal emojis,
+  staggered rise animation, canvas confetti
+- game.js renderFinalResults and renderPodium needed to be replaced
+- Both templates needed a .final-title div added inside #final-panel
+
+WHAT I LEARNED:
+- Kahoot's visual trick: podium order is 2nd, 1st, 3rd left-to-right so 1st
+  place is centered and tallest — creates a classic awards podium silhouette
+- CSS cubic-bezier(.22,1.2,.36,1) creates a spring overshoot effect on the
+  rise animation making it feel bouncy
+- Confetti stops after ~500 animation frames (~8 seconds) to avoid draining CPU
+
+CODE SNIPPET USED:
+```css
+.podium-place {
+  transform: translateY(100px);
+  opacity: 0;
+  transition: transform 0.7s cubic-bezier(.22,1.2,.36,1), opacity 0.5s ease;
+}
+.podium-place.podium-show { transform: translateY(0); opacity: 1; }
+.podium-rank-1 .podium-block { background: #f1c232; height: 110px; }
+.podium-rank-2 .podium-block { background: #b0bec5; height: 80px; }
+.podium-rank-3 .podium-block { background: #cd7f32; height: 58px; }
+```
+
+```js
+function startConfetti(canvas) {
+  var colors = ['#f1c232','#ff4081','#00e5ff','#69f0ae','#ff6d00','#d500f9','#fff176'];
+  var pieces = Array.from({ length: 110 }, function () {
+    return {
+      x: Math.random() * canvas.width, y: Math.random() * -canvas.height,
+      w: 6 + Math.random() * 8, h: 10 + Math.random() * 6,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      vx: (Math.random() - 0.5) * 3, vy: 2 + Math.random() * 3,
+    };
+  });
+}
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 2:
+"Is startConfetti just added right below renderPodium?"
+
+AI RESPONSE SUMMARY:
+- Yes — place it after renderPodium and before the utility functions at the
+  bottom of the IIFE
+- Order doesn't matter inside an IIFE since they're function declarations
+  but grouping logically keeps code readable
+
+WHAT I LEARNED:
+- JavaScript function declarations are hoisted within their scope so order
+  inside the IIFE doesn't affect functionality
+- Keeping related functions grouped (renderFinalResults, renderPodium,
+  startConfetti) makes the code easier to navigate
+
+
+--------------------------------------------------------------------------------
+
+PROMPT 3:
+"There's still no animation — confetti-canvas is null, final-panel className
+is just 'final-panel'"
+
+AI RESPONSE SUMMARY:
+- handleEvent returned true so the new code was running
+- Canvas was being created but startConfetti was getting zero dimensions
+  because the panel had just become visible and layout hadn't completed
+- fp.classList.add('final-screen') was running but the dynamic class addition
+  had timing issues
+
+WHAT I LEARNED:
+- Browsers need a frame to calculate layout after making an element visible
+- Getting offsetWidth/offsetHeight immediately after removing 'hidden' returns 0
+- setTimeout with even 50ms gives the browser time to complete layout
+
+CODE SNIPPET USED:
+```js
+// Before fix — canvas had zero dimensions
+startConfetti(canvas);
+
+// After fix — wait one event loop tick for layout
+setTimeout(function () { startConfetti(canvas); }, 50);
+
+// Size to window instead of parent to avoid zero-dimension issue
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 4:
+"It still didn't fix it — browser cache was serving old game.js"
+
+AI RESPONSE SUMMARY:
+- The new code was in the file (confirmed by grep) but browser was cached
+- Hard refresh with Cmd+Shift+R or DevTools Network → Disable cache
+
+WHAT I LEARNED:
+- When JS changes don't take effect, always suspect browser cache first
+- DevTools Network tab "Disable cache" checkbox is the most reliable way to
+  confirm you're testing the latest code
+- grep -n "functionName" file.js confirms the code is actually saved before
+  spending time debugging the wrong version
+
+
+--------------------------------------------------------------------------------
+
+PROMPT 5:
+"Ran the manual console test — handleEvent returns true but canvas still null,
+final-panel class is still just 'final-panel'"
+
+AI RESPONSE SUMMARY:
+- Dynamic fp.classList.add('final-screen') was the problem
+- Simplest fix: put the purple background styles directly on .final-panel in
+  CSS so it always has position:relative and the correct background
+- Remove the dynamic class addition from renderFinalResults entirely
+
+WHAT I LEARNED:
+- Dynamically adding classes that affect layout/positioning can fail silently
+  when timing is off
+- Putting styles on the element's base class is more reliable than adding
+  a second class at runtime
+
+CODE SNIPPET USED:
+```css
+/* Before: styles were on .final-screen added dynamically */
+/* After: styles go directly on .final-panel */
+.final-panel {
+  position: relative;
+  background: #2d0060;
+  border-radius: 8px;
+  padding: 24px 16px 0;
+  overflow: hidden;
+  min-height: 420px;
+  text-align: center;
+}
+```
+
+================================================================================
+SESSION 3: Docker Port Conflict
+================================================================================
+
+PROMPT 6:
+"Error response from daemon: ports are not available: exposing port TCP
+0.0.0.0:8080 -> 127.0.0.1:0: listen tcp 0.0.0.0:8080: bind: address
+already in use"
+
+AI RESPONSE SUMMARY:
+- Something already running on port 8080
+- Use lsof -i :8080 to find the process
+- Kill it or run Docker on a different port with -p 8081:8080
+
+WHAT I LEARNED:
+- lsof -i :8080 shows the PID and command using a port
+- kill -9 <PID> force-kills the process
+- Docker -p flag maps host:container ports — can use any free host port
+
+ISSUES ENCOUNTERED:
+- lsof revealed a Java process (PID 93891) was already running the app
+- This was the previous mvn spring-boot:run instance still running
+
+HOW I FIXED IT:
+```bash
+lsof -i :8080        # find PID
+kill -9 93891        # kill the Java process
+docker run -p 8080:8080 quiz-app  # now Docker can bind
+```
+
+================================================================================
+SESSION 4: Whitelabel Error on Root URL
+================================================================================
+
+PROMPT 7:
+"Whitelabel Error Page — This application has no explicit mapping for /error,
+status=404 when opening localhost:8080"
+
+AI RESPONSE SUMMARY:
+- Spring Boot has no route for / so it falls back to the error page
+- Fix: add @GetMapping("/") that redirects to /dashboard
+- Or just navigate directly to /dashboard or /auth/login
+
+WHAT I LEARNED:
+- Spring Boot's Whitelabel error page appears whenever a route has no mapping
+- Adding a root redirect is standard practice for web apps so users don't
+  have to know the exact entry URL
+
+CODE SNIPPET USED:
+```java
+@GetMapping("/")
+public String root() {
+    return "redirect:/dashboard";
+}
+```
+
+================================================================================
+SESSION 5: File Upload and Ollama Integration
+================================================================================
+
+PROMPT 8:
+"We want to use Ollama since we don't want to run out of API calls"
+
+AI RESPONSE SUMMARY:
+- Ollama runs locally, free, no API key, works offline
+- Install: brew install ollama, then ollama serve, then ollama pull llama3.2
+- Java code hits http://localhost:11434/api/generate with plain HttpURLConnection
+- Full pipeline: upload file → extract text → send to Ollama → parse JSON
+  questions → insert into DB via QuestionRepository
+
+WHAT I LEARNED:
+- llama3.2 is a good balance of size (~2GB) and quality for structured JSON output
+- Ollama's /api/generate endpoint accepts {"model","prompt","stream":false}
+  and returns {"response":"..."} 
+- stream:false makes Ollama return the complete response at once instead of
+  streaming tokens — essential for JSON parsing
+
+--------------------------------------------------------------------------------
+
+PROMPT 9:
+"BUILD FAILURE: cannot find symbol — method load(java.io.InputStream) in
+FileTextExtractorService.java line 31"
+
+AI RESPONSE SUMMARY:
+- PDFBox 3.x changed the API — PDDocument.load() was removed
+- New API: Loader.loadPDF(byte[]) from org.apache.pdfbox.Loader
+- Need to call file.getBytes() instead of file.getInputStream()
+
+WHAT I LEARNED:
+- Major version bumps in libraries often contain breaking API changes
+- PDFBox 3.0 moved document loading to a separate Loader class
+- Always check the library version in pom.xml against documentation
+
+CODE SNIPPET USED:
+```java
+// PDFBox 2.x (broken)
+try (PDDocument doc = PDDocument.load(file.getInputStream())) {
+
+// PDFBox 3.x (correct)
+import org.apache.pdfbox.Loader;
+try (PDDocument doc = Loader.loadPDF(file.getBytes())) {
+    PDFTextStripper stripper = new PDFTextStripper();
+    return stripper.getText(doc);
+}
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 10:
+"Error: generation_failed — Connection refused"
+
+AI RESPONSE SUMMARY:
+- Inside Docker, localhost refers to the container itself not the host Mac
+- Ollama is running on the Mac at port 11434 but Docker can't reach it via localhost
+- Fix: use host.docker.internal which Docker Desktop resolves to the host machine
+
+WHAT I LEARNED:
+- Docker network isolation means containers cannot reach host services via localhost
+- host.docker.internal is Docker Desktop's special DNS name for the host machine
+- This applies to any local service the containerized app needs to reach
+  (databases, local APIs, Ollama, etc.)
+
+CODE SNIPPET USED:
+```properties
+# Wrong — resolves to the container itself inside Docker
+ollama.base-url=http://localhost:11434
+
+# Correct — resolves to the host Mac from inside Docker
+ollama.base-url=http://host.docker.internal:11434
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 11:
+"How do I test if the Docker → Ollama connection works?"
+
+AI RESPONSE SUMMARY:
+- Exec into the running container and run curl directly
+- If curl returns a response, Java code will work too
+
+WHAT I LEARNED:
+- docker exec -it <container_id> drops you into a shell inside the container
+- Testing network connectivity from inside the container confirms whether
+  host.docker.internal resolves correctly before debugging Java code
+
+CODE SNIPPET USED:
+```bash
+docker ps                          # find container ID
+docker exec -it <id> curl http://host.docker.internal:11434/api/generate \
+  -d '{"model":"llama3.2","prompt":"say hello","stream":false}'
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 12:
+"Error: generation_failed — No JSON array found in model response: [ { question..."
+
+AI RESPONSE SUMMARY:
+- The model WAS generating valid JSON — it was visible in the error message
+- Problem: the response was being cut off because num_predict (token limit)
+  was too low for 15 questions
+- lastIndexOf(']') returned -1 because the closing bracket was missing
+
+WHAT I LEARNED:
+- LLM responses get cut off mid-token when num_predict is exceeded
+- Scale token budget proportionally: 300 tokens × question count
+- Always make JSON parsing defensive — assume the response might be incomplete
+
+CODE SNIPPET USED:
+```java
+// Scale token budget to question count
+String body = mapper.writeValueAsString(
+    mapper.createObjectNode()
+        .put("model", model)
+        .put("prompt", prompt)
+        .put("stream", false)
+        .put("num_predict", 300 * count)
+);
+
+// Handle incomplete array — close after last complete object
+int end = responseText.lastIndexOf('}');
+responseText = responseText.substring(0, end + 1) + "]";
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 13:
+"Error: generation_failed — Unrecognized token 'To': was expecting JSON String..."
+
+AI RESPONSE SUMMARY:
+- Model was adding explanatory text AFTER the JSON array ("To summarize...")
+- lastIndexOf('}') correctly found the last brace but the text after it
+  was included in the string passed to Jackson
+- Fix: check if ] appears after the last } — if yes use it, if no close manually
+
+WHAT I LEARNED:
+- LLMs frequently add concluding text after structured output even when
+  instructed not to — parsing must always strip trailing content
+- The three cases to handle: (1) perfect JSON, (2) truncated JSON missing ],
+  (3) complete JSON with trailing text after ]
+
+CODE SNIPPET USED:
+```java
+int lastBrace = responseText.lastIndexOf('}');
+int closingBracket = responseText.indexOf(']', lastBrace);
+if (closingBracket != -1) {
+    // Array closed properly — take up to and including ]
+    responseText = responseText.substring(0, closingBracket + 1);
+} else {
+    // Truncated or trailing text — close manually after last }
+    responseText = responseText.substring(0, lastBrace + 1) + "]";
+}
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 14:
+"It generated 11 questions when I input 10"
+
+AI RESPONSE SUMMARY:
+- LLMs don't reliably follow exact count instructions
+- Two-part fix: stronger prompt wording AND hard limit with stream().limit(count)
+- Prompt: "Generate EXACTLY %d... Not more, not fewer. EXACTLY %d."
+
+WHAT I LEARNED:
+- LLM instructions are probabilistic, not deterministic — always enforce
+  constraints in code, not just in the prompt
+- stream().limit(count) is a simple guaranteed hard cap regardless of model output
+- Repeating the constraint multiple times in the prompt ("EXACTLY %d... EXACTLY %d")
+  improves but doesn't guarantee compliance
+
+CODE SNIPPET USED:
+```java
+// Hard cap regardless of model output
+return questions.stream().limit(count).collect(Collectors.toList());
+```
+
+================================================================================
+SESSION 6: Session Attribute Bug
+================================================================================
+
+PROMPT 15:
+"Games appear after upload but disappear on refresh"
+
+AI RESPONSE SUMMARY:
+- DashboardController only returned the view name with no model data
+- Never called games.findByUser() so the template had an empty games list
+- Fix: inject GameRepository, call findByUser, add to model
+
+WHAT I LEARNED:
+- Spring MVC model attributes must be explicitly added — returning the view
+  name alone passes no data to Thymeleaf
+- th:each silently renders nothing if the collection is null or empty
+  without throwing an error — easy to miss
+
+CODE SNIPPET USED:
+```java
+@GetMapping("/dashboard")
+public String dashboard(HttpSession session, Model model) {
+    UUID userId = (UUID) session.getAttribute("userID");
+    List<Game> userGames = games.findByUser(userId);
+    model.addAttribute("games", userGames);
+    model.addAttribute("gameCount", userGames.size());
+    return "dashboard";
+}
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 16:
+"FileUploadController always returns 401 even when logged in"
+
+AI RESPONSE SUMMARY:
+- FileUploadController was reading session.getAttribute("userId") lowercase d
+- ProfileController and all other controllers use "userID" with capital ID
+- Java string keys are case-sensitive so "userId" != "userID" — always null
+
+WHAT I LEARNED:
+- Always check existing controllers for the exact session key before writing
+  a new controller that reads from the session
+- Silent auth failures (always returning 401) are often caused by key
+  mismatches rather than actual authentication problems
+- Consistent naming conventions across the codebase prevent this class of bug
+
+CODE SNIPPET USED:
+```java
+// Wrong — always null, always 401
+UUID userId = (UUID) session.getAttribute("userId");
+
+// Correct — matches what LoginController sets on login
+UUID userId = (UUID) session.getAttribute("userID");
+```
+
+================================================================================
+SESSION 7: Host Flow 404
+================================================================================
+
+PROMPT 17:
+"404 error when clicking Host button on game cards"
+
+AI RESPONSE SUMMARY:
+- Dashboard game cards posted to /host/start/{gameId} as a path variable
+- HostController only had POST /host/start with @RequestParam(required=false)
+- Path variable (/host/start/42) and request param (/host/start?gameId=42)
+  are different routing patterns — Spring couldn't match the route
+- Fix: add a new @PostMapping("/start/{gameId}") with @PathVariable
+
+WHAT I LEARNED:
+- @PathVariable reads from the URL path itself (/resource/42)
+- @RequestParam reads from query string (?id=42) or form body
+- They are not interchangeable — Spring routes them differently
+- A 404 (not 400 or 500) means no route matched at all
+
+CODE SNIPPET USED:
+```java
+@PostMapping("/start/{gameId}")
+public String startGame(@PathVariable int gameId,
+                        @RequestParam(defaultValue = "20") int timePerQuestion,
+                        @RequestParam(defaultValue = "50") int maxPlayers,
+                        HttpSession session) {
+    UUID userId = (UUID) session.getAttribute("userID");
+    if (userId == null) return "redirect:/auth/login";
+    GameSession s = sessionService.createSession(gameId, userId, timePerQuestion, maxPlayers);
+    return "redirect:/host/" + s.getInviteCode();
+}
+```
+
+================================================================================
+SESSION 8: Dashboard UI Consistency
+================================================================================
+
+PROMPT 18:
+"The upload card and game cards don't look the same as the action cards"
+
+AI RESPONSE SUMMARY:
+- Upload card was using hardcoded hex colors (#e2e8f0, #666) instead of
+  dashboard CSS variables (--gray-200, --gray-500, --navy, etc.)
+- Font was defaulting to system font instead of 'Sora'
+- Card shadow and border-top accent were missing
+- Fix: rewrite upload card CSS using the existing design system variables
+
+WHAT I LEARNED:
+- When adding new components to an existing styled page, always use the
+  existing CSS variables and design tokens rather than hardcoding values
+- Inconsistent styling is usually caused by copying styles from a generic
+  source instead of inheriting from the page's design system
+
+CODE SNIPPET USED:
+```css
+.upload-card {
+  background: var(--white);
+  border-radius: 14px;
+  padding: 28px 28px 24px;
+  box-shadow: 0 4px 24px rgba(11,31,79,0.1), 0 1px 4px rgba(11,31,79,0.06);
+  border: 1px solid var(--gray-200);
+  border-top: 3px solid var(--success);  /* matches action-card accent pattern */
+}
+
+#upload-title {
+  font-family: 'Sora', sans-serif;  /* match page font */
+  border: 1px solid var(--gray-200);
+  color: var(--navy);
+}
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 19:
+"form.append('count', count) was placed before const form = new FormData()"
+
+AI RESPONSE SUMMARY:
+- JavaScript throws ReferenceError if you use a variable before declaring it
+  with const/let (temporal dead zone)
+- form.append() was called before const form = new FormData()
+
+WHAT I LEARNED:
+- const and let are not hoisted like var — they exist in a "temporal dead zone"
+  from the start of the block until the declaration is reached
+- Reading count and validating inputs should happen before creating FormData
+- FormData creation and all .append() calls should be grouped together
+
+CODE SNIPPET USED:
+```js
+// Wrong order — ReferenceError
+const count = parseInt(document.getElementById('upload-count').value);
+form.append('count', count);  // form doesn't exist yet!
+const form = new FormData();
+
+// Correct order
+const count = parseInt(document.getElementById('upload-count').value);
+if (!file) { ... return; }
+if (!title) { ... return; }
+const form = new FormData();  // declare first
+form.append('file', file);
+form.append('title', title);
+form.append('count', count);  // then append
+```
+
+================================================================================
+SESSION 9: Cross-Platform Deployment
+================================================================================
+
+PROMPT 20:
+"What if teammates are not on Mac?"
+
+AI RESPONSE SUMMARY:
+- Windows: Docker Desktop supports host.docker.internal natively — no changes
+- Linux: host.docker.internal not supported in plain Docker by default
+- Fix for Linux: add extra_hosts to docker-compose.yml
+- Ollama install command differs by OS
+
+WHAT I LEARNED:
+- host.docker.internal is a Docker Desktop feature — not available in
+  plain Docker Engine on Linux
+- extra_hosts: host-gateway is the Linux equivalent and is harmless on
+  Mac/Windows so it's safe to add for everyone
+- Always document OS-specific setup steps when teammates use different systems
+
+CODE SNIPPET USED:
+```yaml
+# docker-compose.yml — works on Mac, Windows, and Linux
+services:
+  app:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+```bash
+# Linux Ollama install
+curl -fsSL https://ollama.com/install.sh | sh
+ollama serve &
+ollama pull llama3.2
+
+# Windows — download installer from ollama.com/download
+# Mac
+brew install ollama
+```
+
+================================================================================
+REFLECTION
+================================================================================
+
+Most useful AI assistance:
+- Systematic codebase audit before writing any new code — identified exactly
+  what was done and what was missing, preventing hours of duplicate work
+- Diagnosing the confetti canvas zero-dimension bug through methodical
+  browser console testing and process of elimination
+- Building robust LLM output parsing that handles all edge cases: truncated
+  JSON, trailing text, wrong question count
+- Identifying that Docker localhost isolation was causing the Ollama connection
+  failure — a non-obvious networking issue
+
+Challenges I solved with AI help:
+- PDFBox 3.x breaking API change (Loader.loadPDF vs PDDocument.load)
+- Docker container cannot reach host services via localhost
+- LLM output is non-deterministic — model adds trailing text, truncates JSON,
+  ignores exact count instructions — requires defensive parsing + hard limits
+- Session attribute key case sensitivity ("userID" vs "userId") causing
+  silent 401 errors
+- @PathVariable vs @RequestParam routing mismatch causing 404
+- JavaScript temporal dead zone — const used before declaration
+- Browser cache serving old JS after code changes
+- CSS design system inconsistency between new and existing components
+
+What I would do differently:
+- Test Docker networking before writing any service that calls localhost
+- Check existing session key names in other controllers before writing new ones
+- Use Postman to verify Ollama API request/response shape before integrating
+- Draw the full request flow diagram before writing the file upload pipeline
+- Add CSS variables to new components from the start instead of refactoring later
+- Test with the actual intended input (correct number of questions, natural
+  game completion) rather than shortcuts during development
+
+Key concepts learned:
+- Server-side authoritative game loop using ScheduledExecutorService prevents
+  client-side cheating by keeping all timing and scoring on the server
+- STOMP over WebSocket enables real-time pub/sub — hosts and players subscribe
+  to different topics but receive the same broadcast events
+- LLM integration for structured JSON generation requires: (1) clear prompt
+  with format examples, (2) sufficient token budget, (3) defensive parsing
+  that handles all failure modes regardless of prompt quality
+- Docker host networking differs across Mac, Windows, and Linux — extra_hosts
+  is the cross-platform solution
+- Browser layout timing: making an element visible and immediately reading its
+  dimensions returns 0 — always wait one event loop tick
+- Temporal dead zone in JavaScript: const/let cannot be used before declaration
+  unlike var which is hoisted
+
+Time spent: ~6 hours
+AI tools used: Claude (Anthropic)

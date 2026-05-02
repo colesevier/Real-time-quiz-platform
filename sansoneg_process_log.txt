@@ -1,0 +1,105 @@
+First, I added the documentation, such as Testing Plan, Technical Specifications, Detailed Design,
+to a project on my Claude. This is so the AI has an idea of what the goal is, the functionality,
+the design, the architecture.
+
+PROMPT 1:
+I was confused on what files are being used in the repo and what files aren't.
+I saw that there is JSP (which is deprecated), spring boot and servlets.
+It seemed the Spring Boot controllers where what was actually being used.
+So there was a conflict of two frameworks trying to coexist at the same time.
+So there needed to be a cleanup of the repo.
+
+AI RESPONSE SUMMARY:
+It has the leftover Servlet/JSP artifacts that contradict the documents. That's a cleanup task.
+The working foundation is:
+Spring Boot + Thymeleaf (controllers + .html templates)
+JDBC DAOs (UserDAO, DBConnection, PasswordUtil) — these are fine
+STOMP WebSocket (WebSocketConfig, GameStompController)
+MySQL with sql/schema.sql
+Docker setup that runs it all
+DEAD (ignored by Spring Boot, safe to delete)
+src/main/java/com/quiz/
+servlet/AuthServlet.java            ← replaced by AuthController
+servlet/DashboardServlet.java       ← replaced by controllers
+src/main/webapp/
+WEB-INF/views/login.jsp            ← replaced by login.html
+WEB-INF/views/register.jsp         ← replaced by register.html
+WEB-INF/views/dashboard.jsp        ← replaced by dashboard.html
+WEB-INF/views/lobby.jsp
+WEB-INF/views/game.jsp
+WEB-INF/views/manageGame.jsp
+WEB-INF/web.xml                    ← Spring Boot doesn't use this
+static/css/styles.css              ← duplicate of resources/static/
+static/js/                         ← duplicate of resources/static/
+src/main/websocket/GameSocket.java     ← replaced by GameStompController
+create_kahoot.sql                      ← use sql/schema.sql instead
+Spring Boot simply never loads anything in webapp/ or the raw Servlet classes.
+They exist in the repo but nothing calls them.
+So cleaned up the repo.
+
+PROMPT 2:
+Now it was time to move onto User Authentication, which was the task assigned.
+I needed to add way to findByEmail. Adding it to UserDAO.
+
+AI RESPONSE SUMMARY:
+Look at the existing findByUsername method —
+findByEmail follows the exact same pattern, just querying by email instead.
+Add this method to UserDAO.java: findByEmail
+
+PROMPT 3:
+Then needed to move onto Auth Controller, adding methods such as findByEmail.
+
+AI RESPONSE SUMMARY:
+The key additions are the EMAIL_PATTERN regex, the email taken check in doRegister, and the new
+doGuest method. Notice every session now also sets isGuest —
+that's what lets the dashboard show different content for guests vs registered users.
+
+PROMPT 4:
+I needed to move onto login.html and needed to add the guest form.
+
+AI RESPONSE SUMMARY:
+Let's do login.html first since it needs the guest form added.
+Now register.html — no big changes here, just making sure all the fields and error display are correct.
+Now dashboard.html needs to show different content for guests vs registered users using the isGuest
+session attribute we set.
+
+The key difference between guest and registered: guests can only join games, not create them. 
+Registered users see the full dashboard with past games.
+
+PROMPT 5:
+I asked the AI to design the pages to be more aesthetic. While looking at the Detailed Design, I had a general 
+idea in mind of how it should look. I thought it would be a good idea to have a white/blue aesthetic, so that 
+certain parts of the page pop out while others maintain a normail white color.
+I asked the AI to help me with the design, requesting a white/blue professional aesthetic.
+I also had to ask the AI to make the style a separate css file, since I thought it would be messy to have
+it mixed in with the html in the html file.
+
+AI RESPONSE SUMMARY:
+Login page — split layout with a dark blue branding panel on the left and a clean white form on the right. Has tabs to switch
+between Sign In and Guest mode. No separate guest page needed.
+Register page — same split layout for consistency. The right side has a two-column row for the password fields to save space, 
+and the left panel shows the 3-step onboarding flow.
+Both use the same CSS variables so the color scheme is erfectly consistent across pages.
+Put this in a auth.css file in the appropiate place in the project.
+
+PROMPT 6:
+I noticed an issue with authentication. Help with my user authentication. I tried to create an account, the page told me
+that I need a longer password. So I tried to create with longer password, and it said the username has already been taken. 
+This is the first time I even try to register.
+I asked the AI to help me find and fix the bug.
+
+AI RESPONSE SUMMARY:
+This is a real bug, and it comes down to two issues working together.
+Issue 1: The form doesn't repopulate fields after a validation error.
+Look at register.html — none of the inputs have th:value.
+So when the "password too short" error fires, the form comes back completely blank. You have to retype everything. 
+If you typed the username even slightly differently the second time, you'd hit a different error than you'd expect.
+Issue 2: The register method doesn't catch DataIntegrityViolationException.
+If two registrations race, or if the email is already taken, jdbc.update() throws an uncaught exception and the user 
+gets a 500 instead of a friendly message.
+Here are the fixes:
+register.html — repopulate fields on error.
+AuthController.java — pass fields back to the model, and catch DB duplicates.
+
+PROMPT 7:
+I asked the AI to create a white/blue design for Dashboard, matching the overall aesthetic of the authentication.

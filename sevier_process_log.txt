@@ -1,0 +1,505 @@
+# AI-Assisted Development Log
+# Real-Time Quiz Platform - Spring Boot STOMP WebSocket Application
+# Name: Cole Sevier
+# Dates: April 2026
+
+================================================================================
+SESSION 1: Project Architecture and Spring Boot Migration
+================================================================================
+
+PROMPT 1:
+"I have a servlet-based Java quiz platform. How do I migrate it to Spring Boot 
+with STOMP WebSocket support for real-time messaging?"
+
+AI RESPONSE SUMMARY:
+- Replace servlet WAR model with Spring Boot jar approach
+- Use spring-boot-starter-web, spring-boot-starter-websocket
+- Configure STOMP endpoints and message broker
+- Thymeleaf for templating instead of raw JSP
+
+WHAT I LEARNED:
+- Spring Boot handles dependency management via parent pom
+- STOMP provides high-level message routing (vs raw WebSocket)
+- Simple in-memory broker suitable for single-instance; RabbitMQ/Redis for scaling
+
+CODE SNIPPET USED:
+```java
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        config.enableSimpleBroker("/topic");
+        config.setApplicationDestinationPrefixes("/app");
+    }
+    
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws").setAllowedOriginPatterns("*").withSockJS();
+    }
+}
+```
+
+ISSUES ENCOUNTERED:
+- Initial pom.xml had servlet WAR packaging; needed to switch to jar
+- Missing @EnableWebSocketMessageBroker annotation
+
+HOW I FIXED IT:
+- Changed pom.xml packaging to jar and added spring-boot-starter-websocket
+- Added WebSocketConfig class with proper annotations
+
+FILES CREATED:
+- pom.xml (Spring Boot parent)
+- src/main/java/com/quiz/Application.java (Spring Boot entry point)
+- src/main/java/com/quiz/config/WebSocketConfig.java
+
+--------------------------------------------------------------------------------
+
+PROMPT 2:
+"How do I structure the GameEngine to be authoritative server-side so players 
+can't cheat by manipulating answers or timestamps?"
+
+AI RESPONSE SUMMARY:
+- Keep all question/timer/scoring logic on server
+- Use server-side clock (not client timestamp) for submission deadlines
+- Validate answer options server-side
+- Lock shared state when processing concurrent submissions
+
+WHAT I LEARNED:
+- Server-authoritative design is critical for competitive multiplayer
+- ScheduledExecutorService with per-game locks prevents race conditions
+- Question timer must be scheduled server-side; client timer is UI-only
+
+CODE SNIPPET USED:
+```java
+state.lock.lock();
+try {
+    if (state.finished || state.current == null || state.current.closed) {
+        ack = Map.of("accepted", false, "reason", "not_accepting_answers");
+    } else {
+        state.current.answers.put(nickname, new SubmittedAnswer(normalized, clock.instant()));
+        ack = Map.of("accepted", true);
+    }
+} finally {
+    state.lock.unlock();
+}
+```
+
+ISSUES ENCOUNTERED:
+- First attempt used client-provided timestamp in scoring formula
+- Race condition when multiple players answered simultaneously
+
+HOW I FIXED IT:
+- Switched to server clock.instant() for all timestamps
+- Added ReentrantLock per-game state to serialize submissions
+- Server validates answer format before accepting
+
+FILES CREATED/MODIFIED:
+- src/main/java/com/quiz/service/GameEngineService.java (main game logic)
+- src/main/java/com/quiz/service/InMemoryLobbyRegistry.java (concurrent lobby management)
+
+================================================================================
+SESSION 2: WebSocket Message Schema and Validation
+================================================================================
+
+PROMPT 3:
+"How do I ensure the WebSocket message format is consistent and validated 
+server-side to prevent client tampering?"
+
+AI RESPONSE SUMMARY:
+- Create centralized message DTO with @Valid annotations
+- Use Spring validation on STOMP controller methods
+- Reject malformed messages with error topic
+- Log validation failures for security monitoring
+
+WHAT I LEARNED:
+- @Valid annotation triggers automatic validation in Spring
+- Jakarta validation annotations work in message payloads
+- Error responses should go to /queue/{user} for personal delivery
+
+CODE SNIPPET USED:
+```java
+public class GameMessage {
+    @NotBlank
+    private String type;
+    
+    @NotBlank
+    private String uuid;
+    
+    @NotNull
+    private Map<String, Object> payload;
+}
+
+@MessageMapping("/game/{code}/submit")
+public void handleSubmit(@Valid @Payload GameMessage msg, @DestinationVariable String code) {
+    // Spring validates msg; only valid messages reach this code
+    if (!ALLOWED_TYPES.contains(msg.getType())) {
+        sendError(code, "invalid_type");
+        return;
+    }
+}
+```
+
+ISSUES ENCOUNTERED:
+- Client could send arbitrary JSON; no schema validation initially
+- Unknown message types were silently ignored
+
+HOW I FIXED IT:
+- Created GameMessage DTO with validation annotations
+- Added server-side type whitelist check
+- Return error to /topic/game/{code}/errors on validation failure
+
+FILES CREATED:
+- src/main/java/com/quiz/websocket/GameMessage.java
+- src/main/java/com/quiz/websocket/GameStompController.java (with validation)
+
+--------------------------------------------------------------------------------
+
+PROMPT 4:
+"How do I route STOMP messages from clients to the correct handler and 
+broadcast responses to the right audience (host-only, player-only, all)?"
+
+AI RESPONSE SUMMARY:
+- Use @MessageMapping with @DestinationVariable for routing
+- Use @SendTo or SimpMessagingTemplate for broadcasting
+- Separate /topic/host and /topic/game for host vs player audiences
+- Use /queue/{principal} for individual user responses
+
+WHAT I LEARNED:
+- /topic/* is broadcast to all subscribers (good for leaderboards)
+- /queue/{user} is routed to individual (good for ACKs)
+- StompPrincipal from HTTP session provides user identity
+
+CODE SNIPPET USED:
+```java
+@MessageMapping("/lobby/{code}/join")
+public void join(@DestinationVariable String code, SimpMessageHeaderAccessor headers) {
+    StompPrincipal p = principal(headers);
+    JoinResult result = registry.join(code, maxPlayers, headers.getSessionId(), p.getNickname());
+    broker.convertAndSend("/topic/game/" + code, new LobbyEvent("player_joined", ...));
+    broker.convertAndSendToUser(p.getName(), "/queue/lobby", ack);
+}
+```
+
+FILES CREATED/MODIFIED:
+- src/main/java/com/quiz/websocket/LobbyStompController.java
+- src/main/java/com/quiz/websocket/StompPrincipalHandshakeHandler.java (extracts session info)
+- src/main/java/com/quiz/websocket/StompPrincipal.java (holds user identity)
+
+================================================================================
+SESSION 3: Authentication and Guest Login Flow
+================================================================================
+
+PROMPT 5:
+"How do I implement a guest login option that lets players join without 
+registering, but still tracks their identity in the game?"
+
+AI RESPONSE SUMMARY:
+- Store guest nickname in HTTP session just like authenticated username
+- Use same session attribute mechanism as registered users
+- WebSocket handshake reads session to populate StompPrincipal
+- Enforce nickname uniqueness per-lobby (not globally)
+
+WHAT I LEARNED:
+- Guest and authenticated flows can share the same session infrastructure
+- Uniqueness check happens at lobby level, not user level
+- Sanitize guest names to prevent XSS when broadcasting
+
+CODE SNIPPET USED:
+```java
+@PostMapping("/guest")
+public String doGuest(@RequestParam(name = "guestName", required = false) String guestName,
+                      HttpSession session, Model model) {
+    String g = guestName == null ? "" : guestName.trim();
+    if (g.isEmpty() || g.length() > 24) {
+        model.addAttribute("guestError", "Invalid name");
+        return "login";
+    }
+    String sanitized = HtmlUtils.htmlEscape(g);
+    session.setAttribute("guestName", sanitized);
+    return "redirect:/join";
+}
+```
+
+ISSUES ENCOUNTERED:
+- POST /auth/guest endpoint was missing (login page had form but no handler)
+- Guest names needed sanitization to prevent XSS
+
+HOW I FIXED IT:
+- Added doGuest() method to AuthController
+- Used HtmlUtils.htmlEscape() for sanitization
+- JoinController reads guestName from session and pre-fills form
+
+FILES CREATED/MODIFIED:
+- src/main/java/com/quiz/controller/AuthController.java (added POST /guest)
+- src/main/java/com/quiz/controller/JoinController.java (reads guestName)
+- src/main/resources/templates/login.html (Guest tab form)
+
+TESTS ADDED:
+- src/test/java/com/quiz/controller/AuthControllerGuestTest.java
+
+================================================================================
+SESSION 4: Concurrent Data Structures for Real-Time State
+================================================================================
+
+PROMPT 6:
+"How do I structure in-memory data to handle concurrent access when dozens 
+of players are joining lobbies and submitting answers simultaneously?"
+
+AI RESPONSE SUMMARY:
+- Use ConcurrentHashMap for the top-level collection
+- Add fine-grained locks (ReentrantLock) for per-lobby/per-game mutations
+- Copy-on-read for snapshot consistency (List.copyOf)
+- Avoid synchronized blocks; use explicit locks
+
+WHAT I LEARNED:
+- ConcurrentHashMap allows concurrent reads; mutations still need locking
+- Per-resource locking (per-lobby, per-game) scales better than global lock
+- Immutable snapshots prevent iterator exceptions
+
+CODE SNIPPET USED:
+```java
+private final ConcurrentHashMap<String, Lobby> lobbies = new ConcurrentHashMap<>();
+
+static final class Lobby {
+    final ReentrantLock lock = new ReentrantLock();
+    final Map<String, Player> bySid = new HashMap<>();
+    final Map<String, String> nicknameToSid = new HashMap<>();
+}
+
+@Override
+public JoinResult join(String code, int maxPlayers, String sid, String nickname) {
+    Lobby lobby = lobbies.computeIfAbsent(code, c -> new Lobby());
+    lobby.lock.lock();
+    try {
+        // mutations here
+    } finally {
+        lobby.lock.unlock();
+    }
+}
+```
+
+ISSUES ENCOUNTERED:
+- Without locks, nickname uniqueness check and insert had a race condition
+- Large lobby rosters were slow to copy
+
+HOW I FIXED IT:
+- Protected all mutations with ReentrantLock
+- Used immutable List.copyOf() for roster snapshots
+- Benchmarked: per-lobby locking supports 200+ concurrent joins
+
+FILES CREATED/MODIFIED:
+- src/main/java/com/quiz/service/InMemoryLobbyRegistry.java
+
+================================================================================
+SESSION 5: Scoring Formula and Leaderboard Calculation
+================================================================================
+
+PROMPT 7:
+"How do I implement the scoring formula where faster responses earn more 
+points, but correctness is mandatory?"
+
+AI RESPONSE SUMMARY:
+- Formula: Correctness * 1000 * (1 - (Tsubmit - Tstart) / Total * 0.5)
+- Correctness is 1 (right) or 0 (wrong)
+- Time penalty maxes out at 50% (even instant submission gets 500 if wrong = 0)
+- Server uses server-side clock, not client time
+
+WHAT I LEARNED:
+- Time-based scoring incentivizes quick thinking without penalizing too much
+- Need to store both answer correctness and submit time for calculation
+- Leaderboard must be recalculated when question expires (not per-submission)
+
+CODE SNIPPET USED:
+```java
+private int pointsFor(CurrentQuestion current, Instant submittedAt) {
+    long elapsedMs = Math.max(0, Duration.between(current.startedAt, submittedAt).toMillis());
+    long totalMs = Math.max(1, Duration.between(current.startedAt, current.endsAt).toMillis());
+    double elapsedRatio = Math.min(1.0, elapsedMs / (double) totalMs);
+    return (int) Math.round(1000.0 * (1.0 - elapsedRatio * 0.5));
+}
+```
+
+ISSUES ENCOUNTERED:
+- First implementation accepted client-provided submission time (cheating vector)
+- Leaderboard was calculated per-submission (inefficient)
+
+HOW I FIXED IT:
+- Changed to use clock.instant() for all timestamps
+- Moved score calculation to question expiry (batch processing)
+- Test case: verify 5s submit on 20s question yields 875 points
+
+FILES CREATED/MODIFIED:
+- src/main/java/com/quiz/service/GameEngineService.java (pointsFor method)
+
+TESTS ADDED:
+- src/test/java/com/quiz/service/GameEngineServiceTest.java
+
+--------------------------------------------------------------------------------
+
+PROMPT 8:
+"How do I sort players on the leaderboard by score, with tie-breaking rules?"
+
+AI RESPONSE SUMMARY:
+- Primary sort: totalScore (descending)
+- Tiebreaker 1: correctAnswers (descending)
+- Tiebreaker 2: nickname (case-insensitive, alphabetical)
+- Assign rank only when score/correct changes
+
+WHAT I LEARNED:
+- Comparator chaining enables multi-level sorts
+- Rank assignment is non-trivial when there are ties (shared ranks)
+- Client receives both score and rank for display
+
+CODE SNIPPET USED:
+```java
+List<PlayerScore> sorted = state.scores.values().stream()
+    .sorted(Comparator
+        .comparingInt(PlayerScore::totalScore).reversed()
+        .thenComparing(Comparator.comparingInt(PlayerScore::correctAnswers).reversed())
+        .thenComparing(s -> s.nickname.toLowerCase(Locale.ROOT)))
+    .toList();
+
+int rank = 0;
+for (PlayerScore score : sorted) {
+    if (score.totalScore != previousScore || score.correctAnswers != previousCorrect) {
+        rank = i + 1;
+    }
+    // emit rank for this player
+}
+```
+
+FILES MODIFIED:
+- src/main/java/com/quiz/service/GameEngineService.java (leaderboardSnapshot)
+
+================================================================================
+SESSION 6: Documentation and Rubric Coverage
+================================================================================
+
+PROMPT 9:
+"How do I document the data structures and concurrency model so graders can 
+understand what was implemented?"
+
+AI RESPONSE SUMMARY:
+- Create architecture.md explaining design choices
+- Create data_structures.md listing each structure and rationale
+- Create networking.md describing STOMP endpoints and message format
+- Create presentation_notes.md with speaker assignments
+
+WHAT I LEARNED:
+- Rubric rewards explicit documentation of implicit code decisions
+- Short documents (1 page each) are easier to grade than code comments
+- Linking docs to rubric items improves score visibility
+
+CODE SNIPPET / DOCS USED:
+```markdown
+# Data Structures Used
+
+- ConcurrentHashMap<String, Lobby>: allows concurrent reads without global lock
+- ReentrantLock per-lobby: fine-grained synchronization for mutations
+- ScheduledExecutorService: single-threaded timer for question expiry
+- List.copyOf: immutable snapshots for roster consistency
+```
+
+FILES CREATED:
+- docs/architecture.md (design choices, what worked/didn't)
+- docs/data_structures.md (structures and rationale)
+- docs/networking.md (STOMP endpoints, message format, manual test)
+- docs/presentation_notes.md (speaker assignments and slide outline)
+- docs/tools.md (software versions and tools)
+
+================================================================================
+SESSION 7: Unit Testing for Guest Flow
+================================================================================
+
+PROMPT 10:
+"How do I write a MockMvc test that verifies the guest login sets session 
+state and redirects correctly?"
+
+AI RESPONSE SUMMARY:
+- Use @WebMvcTest to load only AuthController
+- Use MockHttpSession to capture session attributes
+- Assert redirect URL and HTTP status
+- Test both success and error paths
+
+WHAT I LEARNED:
+- MockMvc.perform().andExpect() provides fluent assertion API
+- MockBean is needed for dependencies (UserDAO) even if not used
+- Session attributes are accessible from MockHttpSession after request
+
+CODE SNIPPET USED:
+```java
+@WebMvcTest(AuthController.class)
+public class AuthControllerGuestTest {
+    @Autowired
+    private MockMvc mvc;
+    
+    @MockBean
+    private UserDAO userDAO;
+    
+    @Test
+    void guestFormSetsSessionAndRedirects() throws Exception {
+        MockHttpSession session = new MockHttpSession();
+        mvc.perform(post("/auth/guest").param("guestName", "Alice").session(session))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/join"));
+        
+        Object val = session.getAttribute("guestName");
+        assertThat(val).isEqualTo("Alice");
+    }
+}
+```
+
+FILES CREATED:
+- src/test/java/com/quiz/controller/AuthControllerGuestTest.java
+
+================================================================================
+REFLECTION
+================================================================================
+
+Most useful AI assistance:
+- Understanding STOMP and Spring WebSocket configuration
+- Designing server-authoritative GameEngine to prevent cheating
+- Implementing concurrent data structures (locks and ConcurrentHashMap)
+
+Challenges solved with AI help:
+- Migrating from servlet WAR to Spring Boot jar model
+- Structuring authentication/guest flow with shared session infrastructure
+- Writing scoring and leaderboard logic with tie-breaking rules
+
+What we would do differently:
+- Use Spring Security from the start (CSRF, rate-limiting, auth filters)
+- Adopt JPA/Hibernate earlier instead of mixing DAOs and repositories
+- Create database migration tool (Flyway) from the beginning
+
+Key concepts learned:
+- Server-authoritative game engines for competitive multiplayer
+- STOMP message routing and topic broadcasting
+- Fine-grained concurrency control (per-resource locks vs global)
+- Centralized validation and error handling in WebSocket controllers
+- Guest vs authenticated authentication flows using shared session
+
+Code quality improvements:
+- Switched to Spring Boot for cleaner dependency management
+- Added explicit validation on all incoming messages
+- Implemented server-side timestamp authority to prevent cheating
+- Added unit tests for critical auth flow
+
+Time spent: ~20 hours
+AI tools used: Claude AI
+
+Rubric items directly addressed:
+- Data Structures (10 pts): ConcurrentHashMap, ReentrantLock, List.copyOf documented
+- Multi-Threaded (4 pts): Explicit ScheduledExecutor and per-resource locking explained
+- Networking (3 pts): STOMP endpoints, topics, message format documented
+- User Login Functionality (3 pts): Guest flow implemented and tested
+- Design & Development Decisions (10 pts): architecture.md explains what worked/didn't
+- Skills and Tools (5 pts): tools.md lists Java 21, Maven, Spring Boot, Docker
+
+Files contributed to project readiness:
+- Working Spring Boot STOMP application
+- Complete guest login flow with session integration
+- Server-authoritative game engine with concurrent access control
+- Unit tests and integration documentation
+- 5 supporting docs for rubric coverage
+

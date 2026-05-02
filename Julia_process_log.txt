@@ -1,0 +1,138 @@
+Before starting, I uploaded the project documentation (Technical Specifications, Detailed Design,
+Testing Plan) to my Claude project so the AI had full context on the platform's goals, user flows,
+and visual direction.
+
+PROMPT 1:
+I noticed the project had no consistent visual design across its pages. The dashboard and auth pages
+had been styled, but pages like the join screen, host lobby, player lobby, and profile page were
+still using generic or inline styles that didn't match the rest of the app. I asked the AI to give
+me an audit of the frontend inconsistencies across all the Thymeleaf templates.
+
+AI RESPONSE SUMMARY:
+The AI identified a clear split in the codebase. The dashboard (dashboard.css) and auth pages
+(auth.css) had been deliberately styled with CSS variables, the Sora font, and a navy/blue/white
+color system. However, several pages were left behind:
+- join.html: pulls from game.css which uses the Outfit font and a completely different token set
+- host_lobby.html: also using game.css, which is fine for the live game panel, but the lobby
+  shell (invite bar, roster, controls) had no real design treatment
+- player_lobby.html: barebones, no consistent header, no branding
+- profile.html / profile_password.html: entirely inline styles using a generic purple (#4f46e5)
+  completely disconnected from the navy/blue system
+The AI recommended establishing a single shared design token file or, at minimum, bringing the
+remaining pages in line with the --navy, --blue, and --ice CSS variables already defined in
+dashboard.css and auth.css.
+
+PROMPT 2:
+My task was to restyle the join.html page to match the overall white/blue aesthetic. The join page
+was the first thing a player sees, so I wanted it to feel polished and welcoming, not like an
+afterthought. I asked the AI to redesign it using the established color system.
+
+AI RESPONSE SUMMARY:
+The AI redesigned join.html as a centered card layout — a clean white card on a light blue-gray
+background (--gray-50). Key changes:
+- Replaced the generic SVG logo mark with the QuizLive brand name and 🎯 icon, matching the
+  dashboard header
+- Styled the game code input as a large, monospaced display field with extra letter-spacing
+  to make it feel like entering a real code
+- Added an input focus ring using --blue-light for accessibility and visual feedback
+- Brought in the Sora font via the existing CDN link already used on dashboard
+- Styled the submit button to match the action-btn style from dashboard.css (navy fill, white text,
+  rounded corners, hover lift effect)
+- Kept the "← Back to dashboard" link subtle and unobtrusive at the bottom
+The AI noted that join.html uses game.css and suggested either extending that file or linking
+both game.css and a small join-specific block, to avoid breaking the live game styles.
+
+PROMPT 3:
+I asked the AI to look at host_lobby.html and help me clean up the lobby shell — specifically the
+invite bar, status row, player roster, and control buttons. The live game panel (question display,
+leaderboard, final podium) was already fine functionally, but the top half of the page felt rough.
+
+AI RESPONSE SUMMARY:
+The AI walked through each section of the lobby shell:
+Invite bar — proposed a two-column layout: game code on the left in a large, bold monospace
+display (matching the join page input style), and the invite link on the right in a copyable
+field with a small "Copy" button. Background set to --navy with white text for contrast.
+Status row — suggested turning the status and player count into pill badges with colored dots:
+green pulsing dot for LOBBY, yellow for IN_PROGRESS. This makes the state obvious at a glance.
+Player roster — recommended styling each roster <li> as a small avatar row with the player's
+initial in a colored circle (generated from username hash) and their name. Empty state gets a
+dimmed "Waiting for players..." message with a subtle animation.
+Control buttons — aligned to the existing action-btn style. The "Cancel Game" and "Finish Game"
+buttons styled as btn-warn (using --danger) and kept visually separated from the primary
+"Start Game" button so hosts don't accidentally hit the wrong one.
+The AI also flagged that the roster badge (#roster-badge) updates via MutationObserver in the
+inline script, so CSS changes to the roster needed to keep the li:not(.empty) selector intact.
+
+PROMPT 4:
+I noticed the player_lobby.html page (the page a player sees after joining, while waiting for the
+host to start) had basically no styling at all — just raw HTML. I asked the AI to design it to
+match the host lobby aesthetic but from the player's perspective.
+
+AI RESPONSE SUMMARY:
+The AI pointed out that the player lobby has a different emotional goal than the host lobby —
+the host is in control and managing things, while the player is waiting and should feel excited,
+not anxious. So the design leans warmer:
+- Full-bleed dark navy header with the game code displayed prominently so players can share it
+- A "You're in!" confirmation message with the player's nickname displayed back to them
+- An animated waiting indicator (three pulsing dots) with text: "Waiting for the host to start..."
+- A live player list that updates via STOMP WebSocket, styled as a grid of name pills rather
+  than a vertical list — shows social proof and builds anticipation
+- A subtle countdown or "get ready" message appears once the host triggers game start, giving
+  players a 3-second visual cue before the first question arrives
+All colors pulled from the existing CSS variable set (--navy, --blue, --ice, --accent).
+
+PROMPT 5:
+The profile page (profile.html and profile_password.html) was completely unstyled — it used inline
+styles with a purple color scheme that had nothing to do with the rest of the app. I asked the AI
+to restyle both profile pages to match the dashboard's navy/blue design system and move the styles
+into a dedicated profile.css file.
+
+AI RESPONSE SUMMARY:
+The AI created a new profile.css file under src/main/resources/static/css/ with the following
+structure:
+- Shared header/nav pulled from dashboard.css so the profile page feels like a natural extension
+  of the dashboard (same sticky navy header, same logo, same sign-out link)
+- Two-column card layout on desktop: account info on the left (read-only username and email),
+  edit profile form on the right
+- Input focus states using --blue-light instead of the old purple (#4f46e5)
+- "Save Changes" button restyled as the standard action-btn (navy fill)
+- Alert banners (success/error) restyled using --success and --danger CSS variables
+- profile_password.html linked to the same profile.css and shares the card/form styling
+The AI also flagged that profile.html had input[readonly] styled with background: #f9f9f9 in
+inline CSS — that was replaced with a CSS class so it's maintainable.
+
+PROMPT 6:
+While reviewing the pages in the browser, I noticed the game.css file was being used by both the
+join page and the live game pages (host and player views during the actual quiz). This caused some
+style conflicts — the join card was inheriting game-specific rules it didn't need. I asked the AI
+to help me figure out how to separate the concerns without breaking the live game UI.
+
+AI RESPONSE SUMMARY:
+The AI proposed a clean split:
+game.css stays as the live-game stylesheet — it owns the question panel, choice grid, timer,
+leaderboard, and podium styles. These are the complex real-time UI components.
+A new join.css (small, ~80 lines) handles just the join card layout, code input field, and
+button. It shares the same CSS variables as dashboard.css so tokens stay consistent.
+host_lobby.html and player_lobby.html continue using game.css for the live panel, but the
+lobby shell sections get their styles scoped under a .lobby-shell class to avoid bleeds.
+The AI showed me the exact link tag changes needed in join.html to swap game.css for join.css,
+and confirmed that all the live game pages (host_lobby, player_lobby) would be unaffected.
+
+PROMPT 7:
+I wanted to do a final pass on overall visual consistency. I asked the AI to review all the
+frontend pages side by side and point out anything that still felt mismatched — fonts, spacing,
+button styles, color usage — before I considered the frontend task complete.
+
+AI RESPONSE SUMMARY:
+The AI did a page-by-page summary and flagged three remaining issues:
+1. create-manual.html — the manual question creator form hadn't been touched. It was still using
+   default browser form styles. Recommended linking dashboard.css and applying the standard card
+   and action-btn classes since it's a host-only page that fits the dashboard visual language.
+2. game.js / lobby.js dynamically inject HTML for questions and leaderboard entries. The
+   AI noted that injected elements need to use CSS class names already defined in game.css,
+   not inline styles, otherwise they'll break if game.css is updated. It flagged two places in
+   game.js where color was being set with element.style.background = '#...' directly.
+3. Mobile responsiveness — the dashboard action cards use flex-wrap and min-width: 300px which
+   stacks correctly on small screens, but the roster grid on player_lobby.html had a fixed column
+   count that would overflow on phones. The AI suggested switching to auto-fill grid columns.
+These were noted as follow-up polish items. Core frontend styling task was considered complete.

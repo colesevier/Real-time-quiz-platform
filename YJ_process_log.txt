@@ -1,0 +1,286 @@
+Before starting, I pointed the AI at the project documentation in my Downloads folder
+(High-Level Requirements, Updated Technical Specification, Detailed Design, and Cole's coding
+notes) so it had full context on the platform's goals, the feature scope, the team's tech-stack
+decisions, and the in-flight conventions our other devs had already established.
+
+PROMPT 1:
+read the recent documents downloaded from download folder and understand the current project
+goal and status. your goal is plan in implementing join/host feature. also so now it should
+just be Spring Boot application, instead of another framework trying to coexist at the same
+time says the other dev.
+
+AI RESPONSE SUMMARY:
+The AI read all four docs and gave me a status snapshot. Spring Boot 3 was already in place
+but the repo still had Servlet-era leftovers: a raw-JDBC DBConnection class, a UserDAO that
+called `new` on itself instead of being a Spring bean, an unused JPA starter on the classpath,
+and a README still describing Servlets+JSP+WAR+external Tomcat. The AI told me that's the
+"other framework" my teammate was talking about. It then drafted a layered plan for host/join:
+HTTP controllers (HostController, JoinController, PlayerLobbyController), services
+(GameSessionService, InviteCodeService, LobbyRegistry interface), and JdbcTemplate
+repositories for Game / Question / GameSession. It mapped STOMP destinations and surfaced two
+open decisions: numeric vs alphanumeric codes, and JPA vs JdbcTemplate. It also flagged that
+until Manage Game existed, we'd need to seed a sample quiz so the lobby was testable.
+
+WHAT I LEARNED:
+The "other framework trying to coexist" wasn't anything obvious like a second web framework —
+it was old Servlet-era code patterns sitting next to Spring code. Things like manually
+managing `Connection` objects, `new`-ing DAOs instead of letting Spring inject them, and
+`throws SQLException` propagating through controller methods. Once the AI pointed it out I
+could see how it was fighting Spring Boot's whole point.
+
+PROMPT 2:
+can you check if this coherent with the design document which is in the DOWNLOAD?
+
+AI RESPONSE SUMMARY:
+The AI re-read the design docs and produced a coherence report. It rated my plan ~85% coherent
+and listed three substantive realignments. (1) Detailed Design says "alphanumeric" 6-digit
+codes but Updated Tech Spec implies numeric — flagged as a config flag pending a team decision.
+(2) Detailed Design treats /topic/host/{code} and /topic/game/{code} as separate subscriptions
+but my plan had collapsed them into one /topic/lobby/{code} — realigned to publish to both.
+(3) HLR + Updated Tech Spec require an invite *link* in addition to the code — added. Also
+caught smaller things: status enum names differ between the schema (LOBBY/ACTIVE/FINISHED) and
+doc text (waiting/active/finished/COMPLETED), "Servlet Filter" mentioned in Detailed Design
+should be translated to a Spring HandlerInterceptor, and /join + /play/{code} should be
+unauthenticated since the spec mentions guest play.
+
+WHAT I LEARNED:
+Even when I think I have a plan, the docs have small inconsistencies between them and someone
+has to reconcile them. The AI flagging that two docs disagreed on the code alphabet was useful
+because that decision belonged to the team, not me. I added it to the open-questions list
+instead of just picking one silently.
+
+PROMPT 3:
+alright now PLAN how to make host and join feature. make it future proof. create a test case
+yo make it bullet proof
+
+AI RESPONSE SUMMARY:
+The AI produced a detailed plan with file-by-file responsibilities and a test plan. Key future-
+proofing decisions: LobbyRegistry behind an interface so we can swap to Redis later for
+multi-instance scaling, InviteCodeService behind an interface with configurable alphabet/length
+via application.properties, LobbyEvent envelope with a `version` field so payloads can evolve
+without breaking older clients, and a custom StompPrincipalHandshakeHandler so server-side
+auth on STOMP messages doesn't trust client claims. Test plan: unit tests for invite collision
+retries, lobby capacity boundaries (including a 100-thread concurrency proof), GameSessionService
+guards (host-mismatch / status / empty lobby), plus integration tests for the HTTP and STOMP
+flows. Suggested merge order: cleanup → repos → services → controllers + templates → STOMP →
+JS wiring.
+
+PROMPT 4:
+start building!
+
+AI RESPONSE SUMMARY:
+The AI started with the framework cleanup before adding new code: deleted DBConnection.java,
+refactored UserDAO into a @Repository injecting a JdbcTemplate (Spring now manages the
+DataSource via application.properties — no more env-var hand-rolled connections), removed the
+unused spring-boot-starter-data-jpa dependency from pom.xml and added spring-boot-starter-jdbc
+in its place, fixed AuthController to do constructor injection instead of `new UserDAO()`, and
+removed the leaked `throws SQLException` declarations from the controller methods. Also
+updated the Game model so `userID` is a UUID (matching User) instead of a `byte[]` and aligned
+Question's field names with the actual schema columns (questionPrompt, choiceA-D, correctAnswer).
+
+PROMPT 5:
+[continue building — repositories layer]
+
+AI RESPONSE SUMMARY:
+Created three JdbcTemplate-backed repositories under com.quiz.repository:
+- GameRepository: insert (returns auto-generated gameID via KeyHolder), findById, findByUser.
+  Uses UNHEX/HEX helpers to round-trip the BINARY(16) UUID columns.
+- QuestionRepository: insert, findByGame, countByGame. The schema uses CHAR(1) for the answer
+  column so the mapper handles single-char-to-String conversion.
+- GameSessionRepository: existsByCode (used by the invite generator's collision check),
+  insert (creates row with status='LOBBY'), findByCode, updateStatus (also stamps startedAt
+  when transitioning into ACTIVE).
+
+WHAT I LEARNED:
+JdbcTemplate's `KeyHolder` pattern is the clean way to get an auto-increment id back after an
+INSERT. I would have hand-written a `SELECT LAST_INSERT_ID()` myself; KeyHolder does it without
+a second query. Also: storing UUIDs as BINARY(16) saves space versus VARCHAR(36) but you have
+to UNHEX/HEX in every query, so the helper functions earn their keep.
+
+PROMPT 6:
+[continue — services layer]
+
+AI RESPONSE SUMMARY:
+Three services landed:
+- RandomInviteCodeService implementing InviteCodeService — a SecureRandom-backed generator
+  with a 5-attempt retry loop on collision (calls existsByCode each round). Configurable
+  length and alphabet via @Value-injected properties. Throws IllegalStateException if all
+  attempts collide.
+- InMemoryLobbyRegistry implementing LobbyRegistry — a ConcurrentHashMap of `code -> Lobby`,
+  where each Lobby has its own ReentrantLock plus two maps (sid -> Player, lower-cased
+  nickname -> sid). The lock makes the "check capacity, then insert" check atomic so two
+  threads can't both squeeze into the last slot. The join() method also handles reattach: if
+  a player rejoins with the same nickname after a disconnect, the registry swaps the STOMP
+  session id without emitting a duplicate "player_joined".
+- GameSessionService — orchestrates createSession / startSession / cancelSession / kickPlayer.
+  Every host-only operation re-reads the underlying Game and verifies the caller owns it
+  (HostMismatchException). Status guards reject non-LOBBY transitions where appropriate.
+  Empty-lobby starts throw EmptyLobbyException (per spec edge case 2). Broadcasts go to BOTH
+  /topic/host/{code} and /topic/game/{code} so host UI and player UI stay in sync.
+
+WHAT I LEARNED:
+ConcurrentHashMap alone isn't enough when you need to make a *compound* decision atomically
+("is there room AND if so, add a row"). The per-lobby ReentrantLock is what actually prevents
+the over-fill bug. Just using `synchronized(this)` would lock all lobbies against each other
+which would tank throughput, so per-key locking is the right granularity.
+
+PROMPT 7:
+[continue — STOMP, HTTP controllers, templates, JS]
+
+AI RESPONSE SUMMARY:
+- StompPrincipal + StompPrincipalHandshakeHandler: at the WebSocket handshake, reads the HTTP
+  session and packages userID/username/nickname/joinedCode into a Principal. Every later STOMP
+  message carries this principal, so the controller can authorize without trusting the client.
+- LobbyStompController: handles /app/lobby/{code}/{join,leave,start,cancel,kick}. A
+  ConcurrentHashMap tracks sid -> code so the SessionDisconnectEvent listener can drop the
+  right player when a browser closes.
+- HostController: POST /host/start (creates a sample quiz and a session if no gameId is
+  given), GET /host/{code} (host lobby view, owner check), POST /host/{code}/cancel.
+- JoinController: GET /join (form), POST /join (validates code + nickname against a LOBBY
+  session, stores both in HttpSession, redirects to /play/{code}).
+- PlayerLobbyController: GET /play/{code} (verifies session has matching nickname + code).
+- Three Thymeleaf templates: host_lobby.html (code + invite link + roster + Start/Cancel/Kick),
+  join.html (code + nickname form), player_lobby.html ("Waiting for host..." view).
+- lobby.js: replaced the empty stub. SockJS + stomp.js loaded via CDN. Subscribes to
+  /topic/{host|game}/{code} based on role, plus /user/queue/lobby for personal events.
+  Renders roster diffs, enables/disables Start when count goes 0 ↔ 1.
+- application.properties: added quiz.lobby.code-length, code-alphabet, disconnect-grace,
+  late-join, idle-sweep-minutes tunables.
+
+PROMPT 8:
+[write the unit tests]
+
+AI RESPONSE SUMMARY:
+Three test classes, 20 tests, all green after the fix below:
+- RandomInviteCodeServiceTest — generates 6-digit numeric, retries-then-succeeds (probes 4
+  codes when first 3 collide), throws when all attempts collide, alphanumeric mode emits
+  letters.
+- InMemoryLobbyRegistryTest — join+leave clears roster, capacity boundary (50 OK, 51st FULL),
+  100-thread concurrency proof (50 OKs + 50 FULLs, no over-fill), kick removes by nickname,
+  reattach keeps one roster entry per nickname even with a new STOMP session id, blank
+  nickname rejected, disposeLobby clears state.
+- GameSessionServiceTest — createSession persists, rejects non-owner; startSession rejects
+  empty lobby / non-LOBBY status / non-host caller; cancelSession marks FINISHED + disposes
+  lobby; kickPlayer rejects when status isn't LOBBY.
+
+BUGS AND HOW I FIXED IT:
+First `mvn test` run — 12 passed (the InviteCode and LobbyRegistry tests) and 8 errored
+inside GameSessionServiceTest with: "Mockito cannot mock this class: class
+com.quiz.repository.GameRepository ... Could not modify all classes". The cause: Spring
+Boot 3.2.6 pins an older Mockito (5.7.0) whose default inline mock maker can't instrument
+classes under JDK 25 (which Maven on my machine was using). Fix: created
+src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker containing the single line
+"mock-maker-subclass". That tells Mockito to use the older subclass-based mock strategy
+instead of bytecode rewriting. None of the classes I was mocking were final, so subclass
+mocks were fine. After that, all 20 tests passed.
+
+PROMPT 9:
+[build the JAR + restart the app + smoke test]
+
+AI RESPONSE SUMMARY:
+Killed the old process, ran `mvn spring-boot:run`, waited for "Started Application", curl'd
+the endpoints. Ran `mvn test` again to make sure the test suite was still green.
+
+BUGS AND HOW I FIXED IT:
+First boot of the new code crashed at startup with: "Failed to instantiate
+[com.quiz.service.RandomInviteCodeService]: No default constructor found ... Caused by:
+NoSuchMethodException: <init>()". Cause: my RandomInviteCodeService had two constructors —
+one production (taking the repo) and one package-private one for tests (taking a
+Predicate<String>). When Spring saw multiple non-default constructors with no @Autowired hint,
+it fell back to looking for a no-arg constructor and failed. Fix: added @Autowired on the
+production constructor so Spring knew which one to call. App booted in <1s after that.
+
+PROMPT 10:
+status is stuck at connecting:
+614808:6  GET http://localhost:8080/static/css/styles.css net::ERR_ABORTED 404 (Not Found)
+614808:31  GET http://localhost:8080/static/js/lobby.js net::ERR_ABORTED 404 (Not Found)
+server still sees 0 players
+
+AI RESPONSE SUMMARY:
+The AI diagnosed it instantly: Spring Boot serves src/main/resources/static/ at the URL ROOT,
+not under /static. So the file at static/css/styles.css is exposed as /css/styles.css, NOT
+/static/css/styles.css. My templates were using @{/static/css/styles.css}, which produced the
+wrong URL. Because lobby.js never loaded, the player browser never sent the
+/app/lobby/{code}/join STOMP message, which is why the server saw 0 players. The AI fixed all
+six templates (login, register, dashboard, join, host_lobby, player_lobby) to use @{/css/...}
+and @{/js/...}, restarted the app, verified both assets returned 200, and confirmed roster
+sync started working with two browser windows.
+
+BUGS AND HOW I FIXED IT:
+The auth pages had the same wrong URL prefix from before this PR but I never noticed because
+they had no important client-side JavaScript — the page rendered fine without the stylesheet,
+so I missed the silent 404. The new lobby pages NEEDED lobby.js to function, which made the
+404 visible. Lesson: a 404 on a non-essential CSS file is invisible until something actually
+depends on it.
+
+WHAT I LEARNED:
+Two things. One: Spring Boot's default static-resource path mapping is the URL root, not
+/static. The convention is to write `<link href="/css/foo.css">`, not `<link
+href="/static/css/foo.css">`. Two: when something looks like "the WebSocket isn't connecting",
+check the simpler stuff first — is the JS even loading? The browser console told the truth
+(404 on lobby.js); I didn't have to debug STOMP at all.
+
+PROMPT 11:
+this works! can you update readme so that others can also know what I impemented and any steps
+they need to take to get it working on their sides as well?
+
+AI RESPONSE SUMMARY:
+The AI replaced the obsolete Servlets+JSP+Tomcat-WAR README with a Spring-Boot-only one.
+Sections: What's implemented (auth + host/join lobby), explicit "What's NOT built yet" so
+teammates wouldn't be confused about scope, architecture diagram, full STOMP destination
+table, prerequisites, three database setup variants (mac local install / generic mysql /
+Docker), env vars to export, the `mvn spring-boot:run` command, a step-by-step recipe for
+testing host/join with two browser windows, the configurable lobby tunables, all 20 tests
+documented, project layout tree, and a Common Pitfalls section covering the three issues I
+actually hit during the build (Tomcat header size, MySQL csci201-vs-root password mismatch,
+the /static/* URL gotcha).
+
+PROMPT 12:
+"also, do you guys want to run on docker or locally?" says the other dev. what's the
+implication for both?
+
+AI RESPONSE SUMMARY:
+The AI noted the repo already had a Dockerfile and docker-compose.yml so the question was
+really about inner-loop dev speed. Local (`mvn spring-boot:run` + host MySQL): ~1s app
+restarts, instant Thymeleaf reloads, working IDE breakpoints, lower CPU/RAM. But "works on my
+machine" risk around JDK and MySQL versions. Full Docker (`docker compose up --build`):
+identical Linux JDK + MySQL across the team, schema auto-loaded from the volume mount,
+matches CI/prod. But ~30–60s per Java change rebuild vs ~1s locally, and remote-debug is
+awkward. Recommended middle path: hybrid — DB in Docker (so teammates don't argue about MySQL
+versions), app on host (so iteration stays fast). For the assignment scope I told the AI
+local was fine, and it agreed.
+
+WHAT I LEARNED:
+The right answer for "Docker vs local" depends on what changes most often. For a team where
+the DB schema changes rarely but the app code changes constantly, putting the DB in Docker and
+the app local hits the sweet spot. Going all-in on Docker for dev would have made every code
+change painful for a 30-second rebuild that I don't need at this stage of the project.
+
+PROMPT 13:
+this is the updated setup guide, and the project is rebased. now try run the program with docker
+
+AI RESPONSE SUMMARY:
+The AI followed the team's updated guide step by step: stopped my local app on 8080, switched
+to the develop branch, created the .env file with the team's shared password, opened Docker
+Desktop and waited for it to come up, ran `mvn -DskipTests package` (BUILD SUCCESS), ran
+`docker compose up -d --build`. Both kahoot-app and kahoot-mysql containers reported `Up`.
+
+BUGS AND HOW I FIXED IT:
+But the app's logs showed `Access denied for user 'quiz_user'@'172.18.0.4'` looping with
+Hibernate "Unable to determine Dialect" errors stacking on top of it. Cause: my mysql_data
+Docker volume was leftover from an earlier compose run that had pinned a different password.
+MySQL only honors MYSQL_USER/MYSQL_PASSWORD on FIRST volume init — subsequent restarts ignore
+those env vars even if you change .env. Fix: `docker compose down -v` to wipe the persistent
+volume, then `docker compose up -d --build` to recreate from scratch. After the wipe, the
+schema initialized correctly with the new password and the app booted. I verified all four
+tables (users, games, questions, game_sessions) existed inside the container and /auth/register
+rendered fine.
+
+WHAT I LEARNED:
+Docker named volumes are persistent across `down`/`up` cycles. That's normally a good thing
+(your DB data isn't wiped every restart) but it bit me here because changing the password in
+.env didn't actually reach MySQL — the user was already created in the volume from a previous
+run with a different password. The `-v` flag on `docker compose down` removes the volumes
+along with the containers, which is what you want when you intentionally want a clean slate.
+This is worth adding to the setup guide's troubleshooting section so the next teammate
+doesn't trip over it.

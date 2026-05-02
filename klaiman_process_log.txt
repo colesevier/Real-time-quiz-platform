@@ -1,0 +1,154 @@
+# AI-Assisted Development Log
+# Real-Time Quiz Platform - Gameplay Mechanics & Live Leaderboards
+# Name: Max Klaiman
+# Dates: April 2026
+
+================================================================================
+SESSION 1: Server-Authoritative Game State & Question Broadcasting
+================================================================================
+
+PROMPT 1:
+"How do I broadcast the current question to all players in the session at the exact same time, and how do I enforce a time limit so players can't answer after time is up?"
+
+AI RESPONSE SUMMARY:
+- Recommended using Spring's `SimpMessagingTemplate` to push messages to a specific STOMP topic (e.g., `/topic/game/{gameId}`).
+- Suggested implementing a `ScheduledExecutorService` on the backend to handle the countdown timer autonomously.
+- Advised maintaining a "Game State" object (e.g., `WAITING`, `QUESTION_ACTIVE`, `LEADERBOARD`) so the server rejects answer submissions if the state is not `QUESTION_ACTIVE`.
+
+WHAT I LEARNED:
+- **Server Authority:** In multiplayer games, the server must dictate the pace. Trusting the client's timer leads to cheating and out-of-sync gameplay.
+- **WebSocket Topic Routing:** How to dynamically create channels for specific game lobbies so that multiple games can happen simultaneously without data leaking between them.
+- **Scheduled Tasks:** How to use Java's `ScheduledExecutorService` to trigger events (like closing a question) precisely after X seconds.
+
+CODE SNIPPET USED:
+```java
+public void broadcastQuestion(String gameId, Question q, int timeLimitSeconds) {
+    // Update state to accept answers
+    gameStateMap.get(gameId).setState(GameState.QUESTION_ACTIVE);
+    gameStateMap.get(gameId).setQuestionStartTime(Instant.now());
+    
+    // Send question to all subscribed clients
+    messagingTemplate.convertAndSend("/topic/game/" + gameId, new QuestionPayload(q));
+    
+    // Schedule the end of the question
+    scheduler.schedule(() -> {
+        closeQuestion(gameId);
+    }, timeLimitSeconds, TimeUnit.SECONDS);
+}
+```
+
+ISSUES ENCOUNTERED/SOLVED:
+- **Late Joiners:** Players who refreshed their browser or joined slightly late would see a blank screen. Solved by allowing clients to request the "Current Sync State" upon establishing their STOMP connection.
+
+================================================================================
+SESSION 2: Dynamic Speed-Based Scoring System
+================================================================================
+
+PROMPT 2:
+"I want the scoring to be dynamic—players get more points the faster they answer correctly. How do I calculate that and keep track of everyone's score safely when 50 players might answer at the exact same millisecond?"
+
+AI RESPONSE SUMMARY:
+- Explained how to use `Instant.now()` to calculate the exact duration between when the question was broadcast and when the answer payload was received.
+- Provided a mathematical formula to decay points based on elapsed milliseconds.
+- Strongly advised using a `ConcurrentHashMap` for storing player scores to handle simultaneous read/write operations from multiple WebSocket threads.
+
+WHAT I LEARNED:
+- **Thread Safety:** Standard `HashMap` can corrupt or throw a `ConcurrentModificationException` if modified by multiple threads concurrently. `ConcurrentHashMap` uses granular locking to prevent this.
+- **Atomic Operations:** Utilizing `compute()` or `merge()` on concurrent maps to safely increment a player's score without race conditions.
+
+CODE SNIPPET USED:
+```java
+public void processAnswer(String gameId, String playerId, String answer) {
+    GameSession session = gameStateMap.get(gameId);
+    if (session.getState() != GameState.QUESTION_ACTIVE) return; // Reject late answers
+
+    if (session.getCurrentQuestion().getCorrectAnswer().equals(answer)) {
+        long timeTakenMs = Duration.between(session.getQuestionStartTime(), Instant.now()).toMillis();
+        int maxTimeMs = session.getTimeLimitSeconds() * 1000;
+        
+        // Calculate points: Max 1000, decays as time runs out
+        int points = (int) (1000.0 * (1.0 - ((double) timeTakenMs / maxTimeMs)));
+        points = Math.max(0, points); // Prevent negative points
+        
+        // Safely update score
+        session.getPlayerScores().merge(playerId, points, Integer::sum);
+    }
+}
+```
+
+ISSUES ENCOUNTERED/SOLVED:
+- **Network Latency Exploits:** Players with slower internet were getting penalized heavily. I added a small 500ms "grace buffer" to the server's calculation to account for basic network travel time.
+
+================================================================================
+SESSION 3: Live Leaderboard Generation & Frontend Rendering
+================================================================================
+
+PROMPT 3:
+"After every question, I want to show a leaderboard sorted by the highest score. How do I sort my ConcurrentHashMap by values in Java and send it to the frontend?"
+
+AI RESPONSE SUMMARY:
+- Showed how to use Java Streams to extract the `entrySet()` from the map, sort it using `Map.Entry.comparingByValue(Comparator.reverseOrder())`, and collect it into a List of DTOs.
+- Recommended sending only the top 5 or 10 players to save bandwidth, along with the specific player's individual rank if they aren't in the top.
+- Provided frontend logic to animate the leaderboard bars based on the max score.
+
+WHAT I LEARNED:
+- **Java Streams for Sorting:** Sorting maps directly isn't possible, but converting them to a stream of entries makes sorting incredibly elegant and concise.
+- **Data Transfer Objects (DTOs) for websockets:** Sending the raw map exposed internal IDs and unnecessary data. Creating a `LeaderboardEntryDTO` kept the payload lightweight.
+
+CODE SNIPPET USED:
+```java
+public void broadcastLeaderboard(String gameId) {
+    GameSession session = gameStateMap.get(gameId);
+    session.setState(GameState.LEADERBOARD);
+    
+    // Sort the ConcurrentHashMap by score (descending)
+    List<LeaderboardEntry> leaderboard = session.getPlayerScores().entrySet().stream()
+        .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+        .map(entry -> new LeaderboardEntry(entry.getKey(), entry.getValue()))
+        .collect(Collectors.toList());
+
+    messagingTemplate.convertAndSend("/topic/game/" + gameId + "/leaderboard", leaderboard);
+}
+```
+
+ISSUES ENCOUNTERED/SOLVED:
+- **Ties on the Leaderboard:** The initial stream sort randomly ordered players with the exact same score. I chained a secondary comparator (`.thenComparing(...)`) to sort ties alphabetically by player name so the UI remained consistent.
+
+================================================================================
+PROJECT SUMMARY & FINAL RESULT
+================================================================================
+
+What didn't work / needed fixing:
+- Relying on the frontend to tell the server "time is up" was a massive flaw initially; players could easily cheat by altering client-side JS. Shifted to a purely server-authoritative model.
+- Broadcasting huge HashMaps of player data caused UI lag. Optimized by sending only sorted arrays of `LeaderboardEntry` objects.
+
+Key concepts learned:
+- Server-authoritative game engines and state machines.
+- Speed-based scoring algorithms utilizing `java.time.Instant` and `Duration`.
+- Safely handling highly concurrent WebSocket traffic using `ConcurrentHashMap`.
+- Stream API techniques for sorting map values and managing ties.
+
+Code quality improvements:
+- Abstracted all score tracking and countdown logic out of the controllers and into a dedicated `GameEngineService`.
+- Added strict state validation (`if state != QUESTION_ACTIVE`) to prevent packet spoofing and late answers.
+- Implemented defensive bounds checking (`Math.max(0, points)`) to ensure score math never failed gracefully.
+
+Time spent: ~14 hours
+AI tools used: Gemini (Google)
+
+Rubric items directly addressed:
+- Data Structures (10 pts): Deep use of `ConcurrentHashMap` for player scores and Streams/Lists for leaderboard generation.
+- Multi-Threaded (4 pts): Utilized `ScheduledExecutorService` for timers and handled thread-safety with concurrent collections.
+- Networking (3 pts): Heavy reliance on STOMP WebSockets and topic routing (`/topic/game/{id}`).
+- Design & Development Decisions (10 pts): Shift from client-side timing to server-authoritative architecture properly documented.
+
+Files contributed to project readiness:
+- `GameEngineService.java` (Contains all sorting, math, and timer logic)
+- `GameState.java` (Enum managing the phases of the match)
+- `LeaderboardEntry.java` (DTO for socket payloads)
+- `game-live.html` / `game.js` (Frontend logic to render the live leaderboard bars)
+
+REFLECTION:
+This phase of the project was arguably the most challenging but also the most rewarding. Shifting my mindset from traditional HTTP Request/Response cycles to real-time, event-driven WebSocket architectures completely changed how I think about web development. Dealing with concurrency was a major hurdle; realizing that 50 players sending a message at the exact same millisecond could literally crash the server or corrupt the scores if I just used a standard HashMap was an eye-opening lesson in backend engineering. 
+
+Building the leaderboard sorting mechanism using Java Streams felt incredibly clean, and seeing the UI dynamically update and re-rank players based on millimeter-precision response times validated the architectural choices. Ultimately, enforcing a "server-authoritative" model taught me a lot about network security—you can never trust the client, especially when competitive scores are on the line.
