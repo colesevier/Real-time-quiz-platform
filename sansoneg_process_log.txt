@@ -195,8 +195,7 @@ REFLECTION
 ================================================================================
  
 Most useful AI assistance:
-- Diagnosing which files were actually loaded by Spring Boot vs. dead code —
-  this would have taken a long time to figure out alone from framework docs
+- Diagnosing which files were actually loaded by Spring Boot vs. dead code
 - Identifying the root cause of the registration bug, which looked like a
   database problem but was actually a UI state issue with blank form repopulation
 - Explaining the correct static file path convention for Spring Boot —
